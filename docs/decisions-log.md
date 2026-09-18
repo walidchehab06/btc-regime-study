@@ -481,6 +481,58 @@ autoscale well past the last real data point. `pytest tests/` passes
 Owner consulted: yes -- the Bitwise as-of date and figure 10's x-axis
 scope were confirmed via AskUserQuestion before implementation.
 
+**2026-09-18 — Phase 7: sentiment buckets computed from `fng_value` against the section 6.6 thresholds, not from the vendor's own `fng_label`**
+Alternatives considered: reusing `sentiment_daily.fng_label`, the 5-category
+classification alternative.me already assigns ("Extreme Fear", "Fear",
+"Neutral", "Greed", "Extreme Greed") and that query 3 already groups by.
+Reason: checking the actual panel data, alternative.me's own "Extreme Fear"
+band runs from value 5 up to 25, and "Extreme Greed" from 76 to 95 -- not
+the <=20 / >=80 convention BUILD-SPEC section 6.6 explicitly specifies.
+`src/sentiment.py:assign_sentiment_bucket()` classifies every day into
+EXTREME_FEAR (<=20), EXTREME_GREED (>=80), or MODERATE directly from
+`fng_value`, using `config.SENTIMENT_EXTREME_FEAR_MAX` /
+`SENTIMENT_EXTREME_GREED_MIN`, so the two schemes don't get silently
+conflated. `fng_label` is left untouched for anything that still wants the
+vendor's own 5-way split (query 3 is unaffected).
+Owner consulted: yes -- confirmed via AskUserQuestion before implementation.
+
+**2026-09-18 — Phase 7: forward-return summary (n/mean/median/std) computed in pandas, not SQL; the sentiment x regime cross-tab computed in SQL**
+Alternatives considered: extending query 3's SQL window-function pattern to
+all four horizons and adding mean/median/std there too, matching how
+`sql/analysis_queries.sql` already does the 20-day case.
+Reason: SQLite has no built-in median or percentile function, and section
+6.6 requires median, not just mean, for every reported statistic. The
+cross-tab (query 10) only needs counts, so it stays in SQL, consistent with
+every other count-only analysis question in this project. Same split
+already used in Phase 5 for `compute_regime_summary_statistics()` vs. the
+regime_periods/regimes tables.
+Owner consulted: no -- follows the Phase 5 precedent already logged above.
+
+**2026-09-18 — Phase 7: added a quantitative distance-to-transition table beyond the section 6.6 cross-tab**
+Alternatives considered: answering "do extremes cluster near transitions"
+with prose only, eyeballing figures 3 and 6 side by side.
+Reason: `src/sentiment.py:compute_days_to_nearest_transition()` gives a real
+number to discuss instead of an impression -- for every day, the number of
+trading days to the nearest regime-period boundary, then n/mean/median of
+that distance per sentiment bucket
+(`outputs/tables/sentiment_transition_proximity.csv`). No significance test
+run on it, per section 6.6's explicit ban on significance claims here.
+Owner consulted: yes -- confirmed via AskUserQuestion before implementation.
+
+**2026-09-18 — Figure 7's box-plot "n=" labels anchored to each box's own whisker cap, not the raw column max**
+Alternatives considered: the first version placed each label at
+`forward_log_return.max()` for its horizon (one shared height for all three
+boxes).
+Reason: `showfliers=False` hides outlier points from the drawn plot, but a
+column's raw max can still be a hidden outlier sitting far above the
+visible whiskers -- the first render placed labels well above the axes,
+overlapping the subplot titles and even the figure's suptitle. Fixed by
+reading each box's high whisker cap directly from `ax.boxplot()`'s returned
+`bplot["caps"]` and expanding `ax.set_ylim()` with a proportional margin
+before placing text, so every label sits just above its own box regardless
+of that bucket's outliers.
+Owner consulted: no -- caught and fixed while reviewing the rendered figure.
+
 **Concepts the owner is currently learning, noted here rather than in code comments:**
 - The manifest's `has_fetched_today` check is a simple date-string
   comparison, not a general-purpose cache invalidation system — worth being
@@ -550,3 +602,20 @@ scope were confirmed via AskUserQuestion before implementation.
   this), so a citation to "Outlet X, reporting Y's research" is a weaker
   and more honest claim than a citation to "Y's research" directly, and
   the two should never be written as if they were the same thing.
+- Why a forward window's sum can be computed as a difference of two
+  cumulative sums (`src/sentiment.py:compute_forward_log_returns()`): log
+  returns add up over time, so the total return from day t+1 through day
+  t+N is just (cumulative return through day t+N) minus (cumulative return
+  through day t) -- worth tracing by hand on
+  `tests/test_sentiment.py`'s 5-day example to see why this gives the same
+  answer as literally summing the N days, without a reversed rolling
+  window.
+- Why overlapping forward-return windows inflate apparent significance
+  (`docs/methodology.md`'s sentiment section): the 20-day forward return
+  starting tomorrow and the 20-day forward return starting the day after
+  share 19 of their 20 underlying days, so consecutive rows in
+  `outputs/tables/sentiment_forward_returns_daily.csv` are not independent
+  observations even though there's one row per day -- a naive p-value
+  would treat them as if they were, which is why this project reports n,
+  mean, median, and standard deviation only, and no significance test, for
+  every sentiment-bucket statistic.

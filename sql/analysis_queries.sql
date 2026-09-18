@@ -209,3 +209,24 @@ SELECT
     n_days
 FROM regime_periods
 ORDER BY start_date;
+
+-- Query 10: Cross-tabulated against regime label, how many days fall into
+-- each sentiment bucket -- extreme fear (Fear & Greed value <= 20),
+-- extreme greed (>= 80), or moderate (everything else)? Per BUILD-SPEC
+-- section 6.6's mandatory sentiment x regime cross-tab. Bucket boundaries
+-- match config.SENTIMENT_EXTREME_FEAR_MAX / SENTIMENT_EXTREME_GREED_MIN --
+-- computed directly from fng_value here rather than reusing
+-- sentiment_daily.fng_label, whose own "Extreme Fear" band uses a
+-- different cutoff (<= 25, not <= 20). See docs/decisions-log.md.
+SELECT
+    CASE
+        WHEN s.fng_value <= 20 THEN 'EXTREME_FEAR'
+        WHEN s.fng_value >= 80 THEN 'EXTREME_GREED'
+        ELSE 'MODERATE'
+    END AS sentiment_bucket,
+    g.regime_label,
+    COUNT(*) AS n_days
+FROM sentiment_daily s
+JOIN regimes g ON g.date = s.date
+GROUP BY sentiment_bucket, g.regime_label
+ORDER BY sentiment_bucket, g.regime_label;

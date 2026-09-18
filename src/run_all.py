@@ -20,6 +20,7 @@ from src import (
     fetch_market,
     fetch_sentiment,
     regimes,
+    sentiment,
     validation,
 )
 
@@ -145,6 +146,26 @@ def run_phase_6_validation():
     validation.main()
 
 
+def run_phase_7_sentiment():
+    """
+    Run the sentiment-analysis step for Phase 7.
+
+    Why it exists: groups sentiment.main() under the name BUILD-SPEC
+    section 12 calls "Phase 7 - Sentiment". Runs after Phase 5 has loaded
+    the regimes table, which sentiment.py's transition-proximity check
+    reads, and before run_charts(), which needs
+    outputs/tables/sentiment_forward_returns_daily.csv for figure 7.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
+    print("=== Phase 7: Sentiment ===")
+    sentiment.main()
+
+
 def run_charts():
     """
     Generate every figure, once every table the figures depend on has
@@ -152,11 +173,12 @@ def run_charts():
 
     Why it exists: figure 1's regime bands and figures 3 and 5 need
     regime_periods and outputs/tables/sensitivity_grid.csv, both from
-    Phase 5, and figure 10 needs outputs/tables/validation_comparison.csv
-    from Phase 6, so chart generation moved here from inside
-    run_phase_4_correlations() -- the same reasoning as
-    run_analysis_queries() moving out of Phase 3. See
-    docs/decisions-log.md.
+    Phase 5, figure 10 needs outputs/tables/validation_comparison.csv
+    from Phase 6, and figure 7 needs
+    outputs/tables/sentiment_forward_returns_daily.csv from Phase 7, so
+    chart generation moved here from inside run_phase_4_correlations() --
+    the same reasoning as run_analysis_queries() moving out of Phase 3.
+    See docs/decisions-log.md.
 
     Parameters:
         None.
@@ -212,6 +234,7 @@ def main():
     run_phase_4_correlations()
     run_phase_5_regimes()
     run_phase_6_validation()
+    run_phase_7_sentiment()
     run_charts()
     run_analysis_queries()
 

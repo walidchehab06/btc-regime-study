@@ -1,0 +1,4 @@
+sentiment_bucket,n,mean_days_to_nearest_transition,median_days_to_nearest_transition
+EXTREME_FEAR,280,62.01428571428571,63.0
+EXTREME_GREED,117,36.18803418803419,22.0
+MODERATE,1681,46.90660321237359,38.0

@@ -247,3 +247,91 @@ influence on this than the gold threshold does, visible directly in
 gradient running left to right than top to bottom. The headline
 observation -- that Bitcoin's regime shifted during 2026 -- is not an
 artifact of the specific baseline threshold choice.
+
+## Sentiment analysis (BUILD-SPEC section 6.6)
+
+**Bucket definition.** Every day gets one of three sentiment buckets, from
+the Fear & Greed Index value alone: `EXTREME_FEAR` (value <= 20),
+`EXTREME_GREED` (value >= 80), or `MODERATE` (everything in between) --
+`src/sentiment.py:assign_sentiment_bucket()`. These are the thresholds
+BUILD-SPEC section 6.6 specifies as the index's conventional extreme
+bands. They are **not** the same boundaries as `fng_label`, the
+5-category classification alternative.me already assigns and stores
+alongside `fng_value` (used by query 3): checking the panel data directly,
+alternative.me's own "Extreme Fear" label covers values 5 to 25, and its
+"Extreme Greed" label covers 76 to 95. Using `fng_label` here would have
+silently applied a different, un-stated threshold than the one this
+analysis is supposed to test. Of 2,167 days with a Fear & Greed reading,
+292 (13.5%) are `EXTREME_FEAR` and 117 (5.4%) are `EXTREME_GREED` under
+this project's thresholds.
+
+**Forward returns.** For each horizon in {1, 5, 20, 60} trading days, the
+forward log return at day *t* is the sum of BTC's log returns over days
+*t*+1 through *t*+horizon -- the same forward window
+`sql/analysis_queries.sql` query 3 already uses for the 20-day case, here
+extended to all four horizons and computed in pandas
+(`src/sentiment.py:compute_forward_log_returns()`) rather than SQL,
+because reporting the median alongside the mean is mandatory per section
+6.6, and SQLite has no built-in median function. The full summary --
+n, mean, median, and population standard deviation for every
+(horizon, bucket) combination -- is in
+`outputs/tables/sentiment_forward_returns_summary.csv` and plotted as
+figure 7. A few figures from that table, as of this run:
+
+| Horizon | Bucket | n | mean | median | std dev |
+|---|---|---|---|---|---|
+| 1d | Extreme fear | 292 | +0.0017 | +0.0032 | 0.0543 |
+| 1d | Extreme greed | 117 | +0.0103 | +0.0102 | 0.0527 |
+| 1d | Moderate | 1,756 | +0.0003 | ~0.0000 | 0.0357 |
+| 20d | Extreme fear | 292 | +0.0316 | +0.0334 | 0.1670 |
+| 20d | Extreme greed | 117 | +0.1440 | +0.1165 | 0.2170 |
+| 20d | Moderate | 1,737 | +0.0092 | +0.0064 | 0.1839 |
+| 60d | Extreme fear | 284 | ~0.0000 | -0.0245 | 0.2657 |
+| 60d | Extreme greed | 117 | +0.3404 | +0.1934 | 0.4874 |
+| 60d | Moderate | 1,705 | +0.0490 | +0.0276 | 0.3443 |
+
+Extreme-greed days show the largest forward returns at every horizon, and
+extreme-fear days sit close to zero at 60 days -- the opposite of a
+naive "buy the fear" reading. Whatever this pattern is worth, it is
+reported here as a descriptive fact about this sample, not a signal: see
+the overlapping-window caveat immediately below, and note this project is
+descriptive, not predictive, per `CLAUDE.md`'s non-negotiables --
+nothing here is a trading rule.
+
+**The overlapping-window problem.** The 20- and 60-day forward returns are
+each computed for every trading day, so the window starting tomorrow and
+the window starting the day after share all but one of their underlying
+daily returns. Consecutive rows of
+`outputs/tables/sentiment_forward_returns_daily.csv` are therefore not
+independent observations, even though the table has one row per day --
+n=117 "extreme greed" 60-day observations really reflects far fewer than
+117 independent 60-trading-day (roughly 3-month) periods, since most of
+them overlap each other almost completely. This inflates how significant
+any pattern in the table would look under a naive statistical test. No
+significance test is run here, and none should be inferred from the
+n/mean/median/std numbers above -- they are reported as descriptive
+statistics only, per BUILD-SPEC section 6.6's explicit instruction.
+
+**Sentiment vs. regime.** `sql/analysis_queries.sql` query 10
+cross-tabulates sentiment bucket against regime label
+(`outputs/tables/query_10_sentiment_regime_crosstab.csv`). Extreme fear
+days concentrate heavily in `RISK_ASSET` regimes (189 of 280 regime-labeled
+extreme-fear days, 67.5%) -- consistent with Bitcoin selling off alongside
+risk assets during broad fear. Extreme greed days are more evenly spread
+across all four regimes (28 `HARD_ASSET`, 35 `IDIOSYNCRATIC`, 34 `MIXED`,
+20 `RISK_ASSET`), with no single regime dominating the way `RISK_ASSET`
+dominates extreme fear.
+
+To ask directly whether extremes cluster near regime transitions rather
+than in the middle of stable regimes,
+`src/sentiment.py:compute_days_to_nearest_transition()` measures, for
+every day, its trading-day distance to the nearest boundary (start or
+end) of the regime period it falls in, then compares that distance across
+buckets (`outputs/tables/sentiment_transition_proximity.csv`). Extreme
+fear days sit *further* from transitions on average (mean 62.0 trading
+days, median 63.0, n=280) than moderate days do (mean 46.9, median 38.0,
+n=1,681) -- extreme fear tends to show up mid-regime, not at the edges.
+Extreme greed days sit somewhat *closer* to transitions (mean 36.2, median
+22.0, n=117) than moderate days. This is a real difference in the sample,
+not a tested one -- consistent with the overlapping-window caveat above,
+no significance claim is made about it.

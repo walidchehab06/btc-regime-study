@@ -92,7 +92,8 @@ RECONCILIATION_TOLERANCE = 1e-9
 # rather than inline in database.py, follows section 11's rule that no
 # output naming is left as a magic string buried in analysis code. Query 8
 # (the rolling-correlation reconciliation) was added in Phase 4; query 9
-# (the regime timeline) was added in Phase 5 -- see docs/decisions-log.md.
+# (the regime timeline) was added in Phase 5; query 10 (the sentiment x
+# regime crosstab) was added in Phase 7 -- see docs/decisions-log.md.
 ANALYSIS_QUERY_EXPORT_FILENAMES = [
     "query_01_avg_correlation_by_year.csv",
     "query_02_largest_btc_gold_correlation_moves.csv",
@@ -103,6 +104,7 @@ ANALYSIS_QUERY_EXPORT_FILENAMES = [
     "query_07_returns_reconciliation_check.csv",
     "query_08_correlation_reconciliation_check.csv",
     "query_09_regime_timeline.csv",
+    "query_10_sentiment_regime_crosstab.csv",
 ]
 
 # --- Rolling correlations (BUILD-SPEC section 6.3, section 12 Phase 4) ---
@@ -274,3 +276,24 @@ PUBLISHED_VALIDATION_FIGURES = [
 ]
 
 VALIDATION_COMPARISON_TABLE_PATH = OUTPUTS_TABLES_DIR / "validation_comparison.csv"
+
+# --- Sentiment analysis (BUILD-SPEC section 6.6, section 12 Phase 7) ---
+# Forward-return horizons, in trading days, per section 6.6.
+FORWARD_RETURN_HORIZONS_DAYS = [1, 5, 20, 60]
+
+# Extreme-sentiment thresholds per section 6.6 ("value <= 20 extreme fear,
+# >= 80 extreme greed, the index publisher's conventional bands"). NOTE:
+# alternative.me's own fng_label field (already in the panel) uses
+# different boundaries -- its "Extreme Fear" runs up to value 25, not 20 --
+# so this module classifies buckets directly from fng_value against these
+# two thresholds rather than reusing fng_label. See docs/decisions-log.md.
+SENTIMENT_EXTREME_FEAR_MAX = 20
+SENTIMENT_EXTREME_GREED_MIN = 80
+
+SENTIMENT_BUCKET_EXTREME_FEAR = "EXTREME_FEAR"
+SENTIMENT_BUCKET_EXTREME_GREED = "EXTREME_GREED"
+SENTIMENT_BUCKET_MODERATE = "MODERATE"
+
+SENTIMENT_FORWARD_RETURNS_DAILY_TABLE_PATH = OUTPUTS_TABLES_DIR / "sentiment_forward_returns_daily.csv"
+SENTIMENT_FORWARD_RETURNS_SUMMARY_TABLE_PATH = OUTPUTS_TABLES_DIR / "sentiment_forward_returns_summary.csv"
+SENTIMENT_TRANSITION_PROXIMITY_TABLE_PATH = OUTPUTS_TABLES_DIR / "sentiment_transition_proximity.csv"

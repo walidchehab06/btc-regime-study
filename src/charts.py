@@ -84,6 +84,26 @@ REGIME_LEGEND_ORDER = ["RISK_ASSET", "HARD_ASSET", "IDIOSYNCRATIC", "MIXED"]
 # palette's blue sequential ramp.
 SEQUENTIAL_BLUE_CMAP = LinearSegmentedColormap.from_list("sequential_blue", ["#cde2fb", "#0d366b"])
 
+# --- Sentiment palette (BUILD-SPEC section 9, Phase 7) ---
+# Two new colors, not part of the eight-hue sequence PAIR_COLORS/
+# REGIME_COLORS draw from: #d55e00 (vermillion) and #008300 (the same
+# green already used for REGIME_LABEL_RISK_ASSET) are both from the
+# well-established Okabe-Ito colorblind-safe set, picked from it directly
+# rather than run through this project's own validator. MODERATE reuses
+# BASELINE, the same neutral gray already used for "nothing notable here"
+# elsewhere (figure 1's zero line, figure 3's unlabeled bands).
+SENTIMENT_BUCKET_COLORS = {
+    "EXTREME_FEAR": "#d55e00",
+    "EXTREME_GREED": "#008300",
+    "MODERATE": "#8a8a8a",
+}
+SENTIMENT_BUCKET_DISPLAY_LABELS = {
+    "EXTREME_FEAR": "Extreme fear (F&G ≤ 20)",
+    "EXTREME_GREED": "Extreme greed (F&G ≥ 80)",
+    "MODERATE": "Moderate (21-79)",
+}
+SENTIMENT_BUCKET_ORDER = ["EXTREME_FEAR", "MODERATE", "EXTREME_GREED"]
+
 plt.rcParams["font.family"] = "sans-serif"
 plt.rcParams["axes.edgecolor"] = BASELINE
 plt.rcParams["axes.labelcolor"] = TEXT_PRIMARY
@@ -663,17 +683,166 @@ def plot_validation_comparison(
     return save_figure(fig, filename)
 
 
+def plot_sentiment_overview(panel, filename="fig06_sentiment_overview.png"):
+    """
+    Figure 6: Bitcoin's price on a log scale, with the Fear & Greed Index
+    value plotted on a second axis over the same dates, and its extreme
+    bands (<=20, >=80) shaded.
+
+    Why it exists: BUILD-SPEC section 9, figure 6.
+
+    Parameters:
+        panel: pandas.DataFrame, the primary daily panel, indexed by date,
+            columns "close_BTC-USD" and "fng_value".
+        filename: str, output filename under outputs/figures/.
+
+    Returns:
+        pathlib.Path, the saved figure's path.
+    """
+    fig, price_ax = plt.subplots(figsize=(11, 5))
+    sentiment_ax = price_ax.twinx()
+
+    sentiment_ax.axhspan(0, config.SENTIMENT_EXTREME_FEAR_MAX, color=SENTIMENT_BUCKET_COLORS["EXTREME_FEAR"], alpha=0.12, linewidth=0, zorder=-1)
+    sentiment_ax.axhspan(config.SENTIMENT_EXTREME_GREED_MIN, 100, color=SENTIMENT_BUCKET_COLORS["EXTREME_GREED"], alpha=0.12, linewidth=0, zorder=-1)
+
+    sentiment_ax.plot(
+        panel.index,
+        panel["fng_value"],
+        color=SENTIMENT_BUCKET_COLORS["MODERATE"],
+        linewidth=0.8,
+        alpha=0.7,
+        label="Fear & Greed value (right axis)",
+    )
+    sentiment_ax.set_ylim(0, 100)
+    sentiment_ax.set_ylabel("Fear & Greed Index value (0-100)")
+
+    price_ax.plot(panel.index, panel["close_BTC-USD"], color=TEXT_PRIMARY, linewidth=1.3, label="BTC-USD close (left axis)", zorder=3)
+    price_ax.set_yscale("log")
+    price_ax.set_xlabel("Date")
+    price_ax.set_ylabel("BTC-USD close (log scale, USD)")
+    price_ax.set_title("Bitcoin's price against the Fear & Greed Index, extreme bands shaded")
+    price_ax.grid(True, which="both", color=GRIDLINE, linewidth=0.4)
+
+    price_handle, price_label = price_ax.get_legend_handles_labels()
+    sentiment_handle, sentiment_label = sentiment_ax.get_legend_handles_labels()
+    extreme_handles = [
+        Patch(facecolor=SENTIMENT_BUCKET_COLORS["EXTREME_FEAR"], alpha=0.3, label=f"Extreme fear (≤{config.SENTIMENT_EXTREME_FEAR_MAX})"),
+        Patch(facecolor=SENTIMENT_BUCKET_COLORS["EXTREME_GREED"], alpha=0.3, label=f"Extreme greed (≥{config.SENTIMENT_EXTREME_GREED_MIN})"),
+    ]
+    price_ax.legend(
+        handles=price_handle + sentiment_handle + extreme_handles,
+        loc="upper left",
+        frameon=False,
+        fontsize=8,
+    )
+
+    date_range = f"{panel.index.min().date()} to {panel.index.max().date()}"
+    add_caption(
+        fig,
+        f"Source: yfinance (BTC-USD close), alternative.me (Fear & Greed Index), {date_range}. "
+        f"Extreme thresholds (≤20 fear, ≥80 greed) are this study's own convention, per "
+        "docs/decisions-log.md -- not the vendor's own fng_label bands.",
+    )
+
+    return save_figure(fig, filename)
+
+
+def plot_forward_return_distributions_by_bucket(forward_returns_long, filename="fig07_forward_return_distributions.png"):
+    """
+    Figure 7: box plots of BTC's forward log return, one panel per horizon
+    (1, 5, 20, 60 trading days), one box per sentiment bucket, with each
+    box's sample size annotated.
+
+    Why it exists: BUILD-SPEC section 9, figure 7. The panel-per-horizon
+    layout makes the section 6.6 overlapping-window problem visible on its
+    own axis -- the 20- and 60-day panels are built from the same
+    underlying daily returns as the 1- and 5-day panels, just summed over
+    longer, heavily overlapping windows, so their boxes are not
+    independent evidence of anything, a point the caption makes explicit.
+
+    Parameters:
+        forward_returns_long: pandas.DataFrame from
+            src/sentiment.py:build_forward_returns_long(), columns
+            horizon_days, sentiment_bucket, forward_log_return.
+        filename: str, output filename under outputs/figures/.
+
+    Returns:
+        pathlib.Path, the saved figure's path.
+    """
+    horizons = sorted(forward_returns_long["horizon_days"].unique())
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8.5))
+    axes = axes.flatten()
+
+    for ax, horizon_days in zip(axes, horizons):
+        horizon_df = forward_returns_long[forward_returns_long["horizon_days"] == horizon_days]
+        box_data = []
+        box_labels = []
+        box_counts = []
+        box_buckets = []
+        for bucket in SENTIMENT_BUCKET_ORDER:
+            values = horizon_df.loc[horizon_df["sentiment_bucket"] == bucket, "forward_log_return"]
+            if len(values) == 0:
+                continue
+            box_data.append(values.values)
+            box_labels.append(SENTIMENT_BUCKET_DISPLAY_LABELS[bucket])
+            box_counts.append(len(values))
+            box_buckets.append(bucket)
+
+        bplot = ax.boxplot(box_data, tick_labels=box_labels, patch_artist=True, showfliers=False, widths=0.55)
+        for patch, bucket in zip(bplot["boxes"], box_buckets):
+            patch.set_facecolor(SENTIMENT_BUCKET_COLORS[bucket])
+            patch.set_alpha(0.5)
+            patch.set_edgecolor(TEXT_PRIMARY)
+        for median_line in bplot["medians"]:
+            median_line.set_color(TEXT_PRIMARY)
+
+        # Anchor each box's "n=" label to that box's own upper whisker cap
+        # (bplot["caps"] holds a low and a high cap per box, in box order),
+        # not the raw column max -- showfliers=False hides outlier points
+        # from the plot, and the raw max can sit far above the visible
+        # whiskers, which pushed labels up into the title in an earlier
+        # version of this figure.
+        cap_tops = [bplot["caps"][2 * i + 1].get_ydata()[0] for i in range(len(box_data))]
+        y_min, y_max = min(cap_tops + [ax.get_ylim()[0]]), max(cap_tops + [ax.get_ylim()[1]])
+        y_range = y_max - y_min
+        ax.set_ylim(top=y_max + 0.16 * y_range)
+        for position, (n, cap_top) in enumerate(zip(box_counts, cap_tops), start=1):
+            ax.text(position, cap_top + 0.03 * y_range, f"n={n}", ha="center", va="bottom", fontsize=7, color=TEXT_SECONDARY)
+
+        ax.axhline(0, color=BASELINE, linewidth=1, zorder=0)
+        ax.set_title(f"{horizon_days}-trading-day forward return", fontsize=9)
+        ax.set_ylabel("Forward BTC log return")
+        ax.tick_params(axis="x", labelsize=7)
+        ax.grid(True, axis="y", color=GRIDLINE, linewidth=0.5)
+
+    fig.suptitle("Forward BTC return distributions by Fear & Greed bucket")
+    fig.subplots_adjust(hspace=0.4, wspace=0.3)
+
+    add_caption(
+        fig,
+        "Source: panel_daily.parquet, BTC-USD daily log returns and alternative.me Fear & Greed "
+        "value. Forward log return = sum of the next N trading days' log returns; the 20- and "
+        "60-day panels share most of their underlying days from one date to the next (the "
+        "overlapping-window problem, docs/methodology.md), so no significance claim is made -- "
+        "descriptive statistics only, n annotated above each box.",
+    )
+
+    return save_figure(fig, filename)
+
+
 def main():
     """
-    Generate figures 1, 2, 3, 4, 5, and 10 from the already-built database
-    and panel.
+    Generate figures 1, 2, 3, 4, 5, 6, 7, and 10 from the already-built
+    database and panel.
 
     Why it exists: this is the entry point src/run_all.py calls once,
-    after Phase 4 (correlations), Phase 5 (regimes), and Phase 6
-    (validation) have loaded their tables into btc_regime.db -- figure 1
-    needs regime_periods for its shaded bands, figures 3 and 5 need
-    regime_periods and outputs/tables/sensitivity_grid.csv directly, and
-    figure 10 needs outputs/tables/validation_comparison.csv from Phase 6,
+    after Phase 4 (correlations), Phase 5 (regimes), Phase 6 (validation),
+    and Phase 7 (sentiment) have loaded their tables into btc_regime.db
+    and written their output CSVs -- figure 1 needs regime_periods for its
+    shaded bands, figures 3 and 5 need regime_periods and
+    outputs/tables/sensitivity_grid.csv directly, figure 10 needs
+    outputs/tables/validation_comparison.csv from Phase 6, and figure 7
+    needs outputs/tables/sentiment_forward_returns_daily.csv from Phase 7,
     so this can no longer run right after Phase 4 alone. See
     docs/decisions-log.md.
 
@@ -711,6 +880,11 @@ def main():
 
         comparison_table = pd.read_csv(config.VALIDATION_COMPARISON_TABLE_PATH)
         plot_validation_comparison(correlations_90d_pearson, comparison_table)
+
+        plot_sentiment_overview(panel)
+
+        forward_returns_long = pd.read_csv(config.SENTIMENT_FORWARD_RETURNS_DAILY_TABLE_PATH)
+        plot_forward_return_distributions_by_bucket(forward_returns_long)
     finally:
         conn.close()
 

@@ -27,22 +27,28 @@ at the start of every session before writing any code.
 - Tests: pytest tests/
 
 ## Current phase
-Phase 5 — complete. `src/regimes.py` built: rule-based classification on
-the 90-day Pearson `BTC_NASDAQ`/`BTC_GOLD` correlations
-(`classify_regime`), the 15-trading-day persistence filter
-(`apply_persistence_filter`, merges a short run into the *preceding*
-regime — owner-confirmed, see docs/decisions-log.md), the regime timeline
-and per-day regime tables (`build_regime_periods`,
-`build_regimes_daily`), per-regime statistics (annualized return/
-volatility, max drawdown, avg Fear & Greed — new hand-written functions in
-`src/core_math.py`), and the mandatory section 6.5 sensitivity grid (25
-threshold combinations, `run_sensitivity_grid`). `src/charts.py` gained
-figure 3 (regime timeline) and figure 5 (sensitivity heatmap); figure 1
-now shades regime bands. Chart generation moved out of Phase 4 and into
-its own `run_charts()` step, run after Phase 5, since figures 1/3/5 all
-need `regime_periods` (see docs/decisions-log.md). `python -m src.run_all`
-now runs Phase 5 after Phase 4: 2,078 days classified, 16 regime periods
-after filtering, sensitivity grid confirms the 2026 regime shift survives
-all 25 threshold combinations. Query 9 (regime timeline) added to
-sql/analysis_queries.sql; queries 4, 6, and 9 now return non-vacuous
-results. `pytest tests/` passes (43/43). Phase 6 (validation) not started.
+Phase 7 — complete. `src/sentiment.py` built: sentiment bucketing
+(`assign_sentiment_bucket`, `EXTREME_FEAR` <=20 / `EXTREME_GREED` >=80 /
+`MODERATE`, computed from `fng_value` directly — deliberately not the
+same boundaries as the vendor's own `fng_label`, see
+docs/decisions-log.md), forward log returns at 1/5/20/60 trading days
+(`compute_forward_log_returns`), and the n/mean/median/std summary table
+required by section 6.6 (`build_forward_returns_summary`). Also the
+section 6.6 "do extremes cluster near transitions" question, answered two
+ways: a SQL cross-tab of sentiment bucket x regime label (query 10 in
+sql/analysis_queries.sql) and a Python distance-to-nearest-transition
+comparison (`compute_days_to_nearest_transition`,
+`build_transition_proximity_summary`). `src/charts.py` gained figure 6
+(Bitcoin price with Fear & Greed overlay, extreme bands shaded) and
+figure 7 (forward-return box plots by bucket, one panel per horizon, n
+annotated on every box). `src/run_all.py` now runs Phase 7 after Phase 6
+and before `run_charts()`. The overlapping-window problem (20- and 60-day
+forward returns share nearly all their underlying days from one date to
+the next) is documented explicitly in docs/methodology.md; no
+significance test is run anywhere in this phase, per section 6.6's
+instruction. `pytest tests/` passes (51/51, including the new
+`tests/test_sentiment.py`).
+
+Phase 6 (validation, `src/validation.py`, figure 10) completed earlier and
+is not re-summarized here — see docs/decisions-log.md and
+docs/validation.md. Phase 8 (the ML component) not started.
