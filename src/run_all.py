@@ -9,7 +9,7 @@ phase of the pipeline (BUILD-SPEC section 12) adds its step here, in order.
 
 import sys
 
-from src import build_panel, fetch_fred, fetch_market, fetch_sentiment
+from src import build_panel, database, fetch_fred, fetch_market, fetch_sentiment
 
 
 def run_phase_1_data_acquisition():
@@ -54,6 +54,23 @@ def run_phase_2_panel_construction():
     build_panel.main()
 
 
+def run_phase_3_sqlite():
+    """
+    Run the SQLite build-and-query step for Phase 3.
+
+    Why it exists: groups database.main() under the name BUILD-SPEC
+    section 12 calls "Phase 3 - SQLite".
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
+    print("=== Phase 3: SQLite ===")
+    database.main()
+
+
 def main():
     """
     Run the full pipeline, phase by phase.
@@ -69,6 +86,7 @@ def main():
     """
     run_phase_1_data_acquisition()
     run_phase_2_panel_construction()
+    run_phase_3_sqlite()
 
 
 if __name__ == "__main__":

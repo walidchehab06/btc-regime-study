@@ -74,3 +74,29 @@ FRED_FORWARD_FILL_SERIES = {"M2SL", "WALCL"}
 # caps how much of a daily FRED column can be NaN before build_panel.py
 # treats it as a real gap instead of an expected holiday-calendar mismatch.
 FRED_DAILY_MAX_NAN_FRACTION = 0.05
+
+# --- SQLite layer (BUILD-SPEC section 8, section 12 Phase 3) ---
+DB_PATH = PROCESSED_DATA_DIR / "btc_regime.db"
+SQL_DIR = Path("sql")
+SQL_SCHEMA_PATH = SQL_DIR / "schema.sql"
+SQL_ANALYSIS_QUERIES_PATH = SQL_DIR / "analysis_queries.sql"
+OUTPUTS_TABLES_DIR = Path("outputs/tables")
+
+# Query 7 (the reconciliation check) treats two log-return values as a
+# genuine mismatch only above this tolerance, to allow for ordinary
+# floating-point rounding rather than a real data-integrity problem.
+RECONCILIATION_TOLERANCE = 1e-9
+
+# Filenames the seven analysis queries in sql/analysis_queries.sql export
+# to, in the same order the queries appear in that file. Keeping the list
+# here, rather than inline in database.py, follows section 11's rule that
+# no output naming is left as a magic string buried in analysis code.
+ANALYSIS_QUERY_EXPORT_FILENAMES = [
+    "query_01_avg_correlation_by_year.csv",
+    "query_02_largest_btc_gold_correlation_moves.csv",
+    "query_03_forward_returns_by_sentiment_bucket.csv",
+    "query_04_regime_duration_and_count.csv",
+    "query_05_correlation_crossover_days.csv",
+    "query_06_btc_volatility_by_regime.csv",
+    "query_07_returns_reconciliation_check.csv",
+]

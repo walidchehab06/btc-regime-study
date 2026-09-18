@@ -27,4 +27,8 @@ at the start of every session before writing any code.
 - Tests: pytest tests/
 
 ## Current phase
-Phase 3 — not started. Update this line at the end of every session.
+Phase 3 — complete. `sql/schema.sql`, `src/database.py`, and
+`sql/analysis_queries.sql` built; `python -m src.run_all` loads
+panel_daily.parquet into data/processed/btc_regime.db and exports all
+seven analysis queries to outputs/tables/. Query 7's reconciliation check
+passes (0 mismatches). Phase 4 (correlations) not started.

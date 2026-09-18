@@ -144,6 +144,69 @@ clean end to end.
 Owner consulted: yes — verification and walkthrough performed directly
 with the owner.
 
+**2026-09-18 — `rolling_correlations`, `regimes`, and `regime_periods`
+created with their final structure in Phase 3, populated later**
+Alternatives considered: deferring the CREATE TABLE statements for these
+three tables until Phase 4 (correlations) and Phase 5 (regimes) actually
+have data to put in them.
+Reason: BUILD-SPEC section 8 specifies the full schema as one deliverable
+of Phase 3; splitting table creation across phases would mean the schema
+in `sql/schema.sql` is incomplete until Phase 5 finishes, contradicting
+the "make it real, not decorative" framing of section 8. Creating the
+tables now with the right columns and constraints, and leaving them at
+zero rows, is honest -- an empty result is not fabricated data. Analysis
+queries 1, 2, 4, and 5 in `sql/analysis_queries.sql` return 0 rows against
+this database until Phase 4 and Phase 5 run.
+Owner consulted: yes -- explicitly requested this framing for Phase 3.
+
+**2026-09-18 — Analysis query 7 reconciles the ETL load against an
+independently recomputed check table, not correlation values**
+What happened: BUILD-SPEC section 8's literal wording for query 7 is "a
+join proving that the correlation values stored in SQLite match those
+computed in Pandas." `rolling_correlations` is empty until Phase 4 (see
+above), so that query would pass vacuously on 0 rows right now -- not a
+real reconciliation, just a query that can't find a disagreement because
+there's nothing in it to disagree with.
+Alternatives considered: (1) write the literal correlation-value query
+now and accept the vacuous pass, re-verifying it for real once Phase 4
+populates `rolling_correlations`; (2) reconcile `returns_daily` (built by
+melting `panel_daily.parquet` in `src/database.py`) against a second
+table, `returns_daily_recomputed_check`, holding the same log returns
+recomputed independently with a plain row-by-row loop instead of the
+vectorized melt.
+Reason chosen (2): it validates real, present data -- the Phase 3 ETL
+load -- rather than a table that doesn't exist yet, and it follows the
+same "two independently written implementations must agree" principle
+BUILD-SPEC section 6.3 already requires for the Phase 4 correlation
+functions. The query does execute and pass on real data: 17,344 rows
+compared, 0 mismatches. The literal correlation-value reconciliation
+section 8 describes gets added once Phase 4 populates
+`rolling_correlations`; note this as a Phase 4 follow-up, not forgotten
+scope.
+Owner consulted: yes -- asked directly, chose option (2).
+
+**2026-09-18 — `pytest.ini` added with `pythonpath = .`**
+What happened: CLAUDE.md documents `pytest tests/` as the test command,
+but running it bare failed with `ModuleNotFoundError: No module named
+'src'` on every test file, including the pre-existing ones from Phase 1
+and 2 -- `tests/` has no `__init__.py`, so pytest was adding `tests/`
+itself to `sys.path` rather than the repo root. `python -m pytest
+tests/` worked around it by relying on `python -m`'s own path insertion,
+which is presumably how it passed before, but the documented command did
+not actually work standalone.
+Alternatives considered: adding `tests/__init__.py`; leaving it
+undocumented and always invoking via `python -m pytest`.
+Reason: a one-line `pytest.ini` fixes the documented command directly
+without turning `tests/` into a package, which is the smaller change.
+Owner consulted: no -- pre-existing environment gap found and fixed
+while building Phase 3, reported here rather than left silent.
+
+**Observed while building Phase 3, carried forward rather than acted on
+now:** query 3's sentiment-bucket grouping includes one row with a blank
+`sentiment_bucket` and `n_days = 1` -- this is the documented 2018-04-16
+Fear & Greed gap (see the Phase 2 entry above) surfacing again downstream,
+not a new data problem.
+
 **Concepts the owner is currently learning, noted here rather than in code comments:**
 - The manifest's `has_fetched_today` check is a simple date-string
   comparison, not a general-purpose cache invalidation system — worth being
@@ -155,3 +218,17 @@ with the owner.
   through by hand on a small example (the tests in
   `tests/test_build_panel.py` are exactly that example) rather than just
   citing "calendar alignment" as a phrase.
+- Long vs. wide table shape: `panel_daily.parquet` is wide (one column per
+  ticker); `prices_daily`/`returns_daily` in SQLite are long (one column
+  for `ticker`, one row per ticker per day). `database.py`'s melt
+  functions are the conversion. Worth being able to explain why SQL wants
+  long (GROUP BY a value in a column) and pandas rolling-window code wants
+  wide (a column to call `.rolling()` on directly).
+- Window functions in `sql/analysis_queries.sql` (`LAG(...) OVER (ORDER BY
+  date ...)` in queries 2 and 5, `SUM(...) OVER (ROWS BETWEEN 1 FOLLOWING
+  AND 20 FOLLOWING)` in query 3) compute a value per row using neighboring
+  rows, without collapsing rows the way `GROUP BY` does. Worth tracing
+  query 3's frame by hand on a few rows to see why `ROWS BETWEEN 1
+  FOLLOWING AND 20 FOLLOWING` gives a genuinely forward-looking window and
+  why `forward_days_available = 20` is needed to drop the last 20 days of
+  the series, which don't have a full 20-day-ahead window to sum.

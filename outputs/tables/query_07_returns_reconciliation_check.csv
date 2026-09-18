@@ -1,0 +1,1 @@
+date,ticker,log_return_from_etl_load,log_return_recomputed_independently,abs_difference
