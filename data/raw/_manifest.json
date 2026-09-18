@@ -1,0 +1,128 @@
+{
+  "alternative_me_crypto_fear_greed_index": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-09-18",
+    "library_version": "2.34.2",
+    "retrieved_at_utc": "2026-09-18T07:38:44.057596+00:00",
+    "row_count": 3148,
+    "series": "crypto_fear_greed_index",
+    "source": "alternative_me"
+  },
+  "fred_DFII10": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-09-16",
+    "library_version": "2.34.2",
+    "retrieved_at_utc": "2026-09-18T07:38:40.757167+00:00",
+    "row_count": 2250,
+    "series": "DFII10",
+    "source": "fred"
+  },
+  "fred_DTWEXBGS": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-09-11",
+    "library_version": "2.34.2",
+    "retrieved_at_utc": "2026-09-18T07:38:41.567473+00:00",
+    "row_count": 2247,
+    "series": "DTWEXBGS",
+    "source": "fred"
+  },
+  "fred_M2SL": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-07-01",
+    "library_version": "2.34.2",
+    "retrieved_at_utc": "2026-09-18T07:38:42.185379+00:00",
+    "row_count": 102,
+    "series": "M2SL",
+    "source": "fred"
+  },
+  "fred_T10Y2Y": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-09-17",
+    "library_version": "2.34.2",
+    "retrieved_at_utc": "2026-09-18T07:38:43.424797+00:00",
+    "row_count": 2251,
+    "series": "T10Y2Y",
+    "source": "fred"
+  },
+  "fred_WALCL": {
+    "first_date": "2018-02-07",
+    "last_date": "2026-09-16",
+    "library_version": "2.34.2",
+    "retrieved_at_utc": "2026-09-18T07:38:42.789903+00:00",
+    "row_count": 450,
+    "series": "WALCL",
+    "source": "fred"
+  },
+  "yfinance_BTC-USD": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-09-18",
+    "library_version": "1.7.0",
+    "retrieved_at_utc": "2026-09-18T07:38:31.549985+00:00",
+    "row_count": 3151,
+    "series": "BTC-USD",
+    "source": "yfinance"
+  },
+  "yfinance_DX-Y.NYB": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-09-18",
+    "library_version": "1.7.0",
+    "retrieved_at_utc": "2026-09-18T07:38:38.608232+00:00",
+    "row_count": 2171,
+    "series": "DX-Y.NYB",
+    "source": "yfinance"
+  },
+  "yfinance_GC=F": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-09-18",
+    "library_version": "1.7.0",
+    "retrieved_at_utc": "2026-09-18T07:38:37.866621+00:00",
+    "row_count": 2172,
+    "series": "GC=F",
+    "source": "yfinance"
+  },
+  "yfinance_GLD": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-09-17",
+    "library_version": "1.7.0",
+    "retrieved_at_utc": "2026-09-18T07:38:38.255681+00:00",
+    "row_count": 2168,
+    "series": "GLD",
+    "source": "yfinance"
+  },
+  "yfinance_^GSPC": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-09-17",
+    "library_version": "1.7.0",
+    "retrieved_at_utc": "2026-09-18T07:38:38.966474+00:00",
+    "row_count": 2168,
+    "series": "^GSPC",
+    "source": "yfinance"
+  },
+  "yfinance_^IXIC": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-09-17",
+    "library_version": "1.7.0",
+    "retrieved_at_utc": "2026-09-18T07:38:37.083006+00:00",
+    "row_count": 2168,
+    "series": "^IXIC",
+    "source": "yfinance"
+  },
+  "yfinance_^NDX": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-09-17",
+    "library_version": "1.7.0",
+    "retrieved_at_utc": "2026-09-18T07:38:37.464544+00:00",
+    "row_count": 2168,
+    "series": "^NDX",
+    "source": "yfinance"
+  },
+  "yfinance_^VIX": {
+    "first_date": "2018-02-01",
+    "last_date": "2026-09-18",
+    "library_version": "1.7.0",
+    "retrieved_at_utc": "2026-09-18T07:38:39.318838+00:00",
+    "row_count": 2171,
+    "series": "^VIX",
+    "source": "yfinance"
+  }
+}
