@@ -87,3 +87,86 @@ def rolling_pearson_hand_written(series_a, series_b, window):
         correlations.loc[end_date] = pearson_correlation(window_a, window_b)
 
     return correlations
+
+
+def annualized_return(log_returns, trading_days_per_year):
+    """
+    Compute the annualized return implied by a series of daily log returns.
+
+    Why it exists: BUILD-SPEC section 6.4 requires Bitcoin's annualized
+    return as one of the per-regime summary statistics. Daily log returns
+    sum over time (unlike simple returns, which compound multiplicatively),
+    so the average daily log return is scaled up to a full year and then
+    converted back to an ordinary (simple) annual return with exp().
+
+    Parameters:
+        log_returns: pandas.Series or numpy.ndarray of daily log returns,
+            no NaNs.
+        trading_days_per_year: int, e.g. config.TRADING_DAYS_PER_YEAR.
+
+    Returns:
+        float, the annualized simple return (0.20 means 20% per year).
+    """
+    log_returns = np.asarray(log_returns, dtype=float)
+    assert not np.isnan(log_returns).any(), "annualized_return does not accept NaNs"
+    assert len(log_returns) > 0, "annualized_return needs at least one observation"
+
+    mean_daily_log_return = np.mean(log_returns)
+    return float(np.exp(mean_daily_log_return * trading_days_per_year) - 1)
+
+
+def annualized_volatility(log_returns, trading_days_per_year):
+    """
+    Compute the annualized volatility (standard deviation) of a series of
+    daily log returns.
+
+    Why it exists: BUILD-SPEC section 6.4 requires Bitcoin's annualized
+    volatility per regime. Uses the population standard deviation
+    (mean of squared deviations, not the n-1 sample correction) computed
+    the same way as the AVG(x^2) - AVG(x)^2 formula in
+    sql/analysis_queries.sql query 6, so the Python and SQL figures agree
+    by construction rather than by coincidence.
+
+    Parameters:
+        log_returns: pandas.Series or numpy.ndarray of daily log returns,
+            no NaNs.
+        trading_days_per_year: int, e.g. config.TRADING_DAYS_PER_YEAR.
+
+    Returns:
+        float, the annualized standard deviation of daily log returns.
+    """
+    log_returns = np.asarray(log_returns, dtype=float)
+    assert not np.isnan(log_returns).any(), "annualized_volatility does not accept NaNs"
+    assert len(log_returns) > 0, "annualized_volatility needs at least one observation"
+
+    daily_variance = np.mean(log_returns**2) - np.mean(log_returns) ** 2
+    daily_std = np.sqrt(daily_variance)
+    return float(daily_std * np.sqrt(trading_days_per_year))
+
+
+def max_drawdown(price_series):
+    """
+    Compute the maximum drawdown of a price series: the largest peak-to-
+    trough percentage decline, evaluated at every point in time (the
+    trough does not have to be the series' final value).
+
+    Why it exists: BUILD-SPEC section 6.4 requires Bitcoin's maximum
+    drawdown as one of the per-regime summary statistics -- the standard
+    way of showing how bad the worst decline within a period actually was,
+    which "annualized volatility" alone does not capture.
+
+    Parameters:
+        price_series: pandas.Series or numpy.ndarray of prices (not
+            returns), in chronological order, no NaNs.
+
+    Returns:
+        float, the maximum drawdown as a negative fraction (-0.35 means a
+        35% decline from a prior peak). 0.0 if the series never declines.
+    """
+    prices = np.asarray(price_series, dtype=float)
+    assert not np.isnan(prices).any(), "max_drawdown does not accept NaNs"
+    assert len(prices) > 0, "max_drawdown needs at least one observation"
+
+    running_max = np.maximum.accumulate(prices)
+    drawdowns = (prices - running_max) / running_max
+    return float(np.min(drawdowns))

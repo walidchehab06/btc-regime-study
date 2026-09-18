@@ -196,3 +196,16 @@ WHERE a.window = 90
   AND a.method = 'pearson'
   AND ABS(a.correlation - b.correlation) > 0.000000001
 ORDER BY abs_difference DESC;
+
+-- Query 9: The regime timeline -- every regime period, in order, with its
+-- start date, end date, and duration in trading days. This is the literal
+-- "regime timeline table" BUILD-SPEC section 6.4 asks for; query 4
+-- aggregates the same table by regime_label instead of listing periods.
+SELECT
+    regime_id,
+    regime_label,
+    start_date,
+    end_date,
+    n_days
+FROM regime_periods
+ORDER BY start_date;

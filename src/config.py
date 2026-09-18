@@ -91,8 +91,8 @@ RECONCILIATION_TOLERANCE = 1e-9
 # the same order the queries appear in that file. Keeping the list here,
 # rather than inline in database.py, follows section 11's rule that no
 # output naming is left as a magic string buried in analysis code. Query 8
-# (the rolling-correlation reconciliation) was added in Phase 4 -- see
-# docs/decisions-log.md.
+# (the rolling-correlation reconciliation) was added in Phase 4; query 9
+# (the regime timeline) was added in Phase 5 -- see docs/decisions-log.md.
 ANALYSIS_QUERY_EXPORT_FILENAMES = [
     "query_01_avg_correlation_by_year.csv",
     "query_02_largest_btc_gold_correlation_moves.csv",
@@ -102,6 +102,7 @@ ANALYSIS_QUERY_EXPORT_FILENAMES = [
     "query_06_btc_volatility_by_regime.csv",
     "query_07_returns_reconciliation_check.csv",
     "query_08_correlation_reconciliation_check.csv",
+    "query_09_regime_timeline.csv",
 ]
 
 # --- Rolling correlations (BUILD-SPEC section 6.3, section 12 Phase 4) ---
@@ -135,6 +136,44 @@ WINDOW_SENSITIVITY_PAIR = "BTC_NASDAQ"
 # being able to tune independently -- see docs/decisions-log.md.
 CORRELATION_TOLERANCE = 1e-9
 
+# --- Regime classification (BUILD-SPEC section 6.4, section 12 Phase 5) ---
+# Baseline thresholds are a starting proposal per section 6.4 and are
+# stress-tested by the section 6.5 sensitivity grid below, not treated as
+# fixed truth.
+REGIME_NASDAQ_THRESHOLD = 0.40
+REGIME_GOLD_THRESHOLD = 0.35
+REGIME_IDIOSYNCRATIC_THRESHOLD = 0.25
+
+# A daily label run only survives as its own regime period if it holds for
+# at least this many consecutive trading days (section 6.4). Shorter runs
+# are merged into the surrounding regime -- see
+# src/regimes.py:apply_persistence_filter() and docs/decisions-log.md for
+# the merge-direction rule.
+REGIME_PERSISTENCE_MIN_DAYS = 15
+
+REGIME_LABEL_RISK_ASSET = "RISK_ASSET"
+REGIME_LABEL_HARD_ASSET = "HARD_ASSET"
+REGIME_LABEL_IDIOSYNCRATIC = "IDIOSYNCRATIC"
+REGIME_LABEL_MIXED = "MIXED"
+
+# Used to annualize Bitcoin's per-regime return and volatility
+# (src/core_math.py). Matches the 252.0 literal already used in
+# sql/analysis_queries.sql query 6; kept as a separate Python constant
+# rather than parsed out of the SQL file, per section 11's one-tunable-
+# per-value rule for analysis code (SQL text is not Python analysis code).
+TRADING_DAYS_PER_YEAR = 252
+
+# --- Sensitivity analysis (BUILD-SPEC section 6.5, mandatory) ---
+SENSITIVITY_NASDAQ_THRESHOLDS = [0.30, 0.35, 0.40, 0.45, 0.50]
+SENSITIVITY_GOLD_THRESHOLDS = [0.25, 0.30, 0.35, 0.40, 0.45]
+
 # --- Charts (BUILD-SPEC section 9) ---
 OUTPUTS_FIGURES_DIR = Path("outputs/figures")
 FIGURE_DPI = 150
+
+# --- Phase 5 output tables, written directly by src/regimes.py rather
+# than through sql/analysis_queries.sql -- see docs/decisions-log.md for
+# why these three are Python-computed instead of SQL-exported. ---
+REGIME_SUMMARY_STATS_TABLE_PATH = OUTPUTS_TABLES_DIR / "regime_summary_statistics.csv"
+SENSITIVITY_GRID_TABLE_PATH = OUTPUTS_TABLES_DIR / "sensitivity_grid.csv"
+REGIME_LABEL_STABILITY_TABLE_PATH = OUTPUTS_TABLES_DIR / "regime_label_stability_before_after.csv"

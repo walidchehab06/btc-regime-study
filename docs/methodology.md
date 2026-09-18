@@ -146,3 +146,104 @@ against `GLD`, computed separately in the Phase 6 validation step, not
 under the `BTC_GOLD` label. This was a direct question to the project
 owner per BUILD-SPEC section 13 ("which gold series is the headline"), not
 a default I chose silently.
+
+## Regime classification (BUILD-SPEC section 6.4)
+
+I classify every trading day into one of four regimes, using rules on
+that day's 90-day Pearson correlations, not a clustering algorithm.
+Rule-based classification is deliberate: the thresholds are visible,
+stated up front, and can be stress-tested, unlike whatever a clustering
+algorithm decided internally.
+
+| Regime | Condition |
+|---|---|
+| `RISK_ASSET` | corr(BTC, Nasdaq) >= 0.40 and corr(BTC, Nasdaq) > corr(BTC, Gold) |
+| `HARD_ASSET` | corr(BTC, Gold) >= 0.35 and corr(BTC, Gold) > corr(BTC, Nasdaq) |
+| `IDIOSYNCRATIC` | both correlations below 0.25 in absolute value |
+| `MIXED` | anything not matching the above |
+
+These thresholds are a starting proposal, not a fitted result, and
+section 6.5's sensitivity grid exists specifically to test whether they
+matter (see below).
+
+**The persistence filter, and why it's necessary.** Applying the rule
+above to every day, independently, produces labels that flicker: 79
+separate runs of consecutive identical labels over the study period, with
+a median run length of 7 trading days, and 63% of all runs shorter than
+15 days. A regime that changes every week isn't a regime — it's noise
+riding on a threshold. The persistence filter enforces a minimum: a run
+only survives as its own regime period if it holds for at least 15
+consecutive trading days. Shorter runs are merged into the surrounding
+regime.
+
+The one place the rule needed a decision I hadn't seen specified: when a
+short run sits between two *different* regimes, which one absorbs it? I
+merge a short run into the **preceding** regime — a brief blip during an
+established regime doesn't rewrite what came before it. The one exception
+is a short run at the very start of the series, which has no preceding
+regime to merge into, so it takes on the label of the regime that follows
+it instead. A merge can make a run long enough to then swallow its own
+next short neighbor, so the merge step repeats until every surviving run
+clears the 15-day minimum.
+
+The filter's effect, measured directly rather than asserted:
+
+| | Runs (regime periods) | Median run length | Day-to-day label changes |
+|---|---|---|---|
+| Raw (no filter) | 79 | 7 trading days | 78 (3.8% of transitions) |
+| Filtered | 16 | 102 trading days | 15 (0.7% of transitions) |
+
+The filter cuts the day-to-day flip rate by roughly 5x and turns 79 short,
+noisy runs into 16 regime periods long enough to describe and reason
+about. `outputs/figures/regime_label_stability_before_after.png` shows
+this directly: the raw strip is visibly striped with short-lived color
+changes, mostly in 2019-2020 and 2023-2024 when the Nasdaq and gold
+correlations were both hovering near their thresholds; the filtered strip
+underneath, over the same days, shows only 15 changes in total.
+`outputs/tables/regime_label_stability_before_after.csv` has the exact
+counts.
+
+**Outputs.** The filtered regime periods are the regime timeline table
+(`outputs/tables/query_09_regime_timeline.csv`, figure 3). For each
+period, `outputs/tables/regime_summary_statistics.csv` reports Bitcoin's
+annualized return, annualized volatility, maximum drawdown, and average
+Fear & Greed level over that period's dates
+(`src/core_math.py:annualized_return()`, `annualized_volatility()`,
+`max_drawdown()`).
+
+One caveat on the annualized return column specifically: annualizing a
+short window exaggerates whatever happened in it, because the formula
+scales a period's average daily log return up to a full year. The
+20-trading-day `MIXED` period from 2020-12-14 to 2021-01-12 -- the start
+of Bitcoin's late-2020 rally, when the average Fear & Greed reading was
+91.7 (extreme greed) -- annualizes to a return figure in the thousands of
+percent. That number is not wrong given the formula, but it isn't a
+usable estimate of a typical year either; it's what compounding a single
+extraordinary month out to twelve months does arithmetically. Annualized
+return and volatility are more informative for the longer regime periods
+(the `RISK_ASSET` period from 2022-01-11 to 2023-03-22, 300 trading days,
+annualizes to -30.1%) than for anything under roughly two or three
+months. See `docs/limitations.md`.
+
+## Sensitivity analysis (BUILD-SPEC section 6.5)
+
+The baseline thresholds above are a starting proposal, and any
+threshold-based rule invites "why those numbers." I re-ran the
+classification and persistence filter across every combination of the
+Nasdaq threshold in {0.30, 0.35, 0.40, 0.45, 0.50} and the gold threshold
+in {0.25, 0.30, 0.35, 0.40, 0.45} -- 25 combinations
+(`src/regimes.py:run_sensitivity_grid()`) -- and, for each, recorded the
+number of regime periods, the share of days in each regime, and whether
+the most recent regime shift (baseline thresholds put its start at
+2026-08-06, `RISK_ASSET` giving way to `HARD_ASSET`) still lands
+somewhere in calendar year 2026.
+
+Across all 25 combinations, a regime transition still falls in 2026. The
+number of regime periods identified ranges from 13 to 17 (baseline: 16),
+and `RISK_ASSET`'s share of days ranges from about 25% to 46% depending on
+where the Nasdaq threshold is set -- the Nasdaq threshold has more
+influence on this than the gold threshold does, visible directly in
+`outputs/figures/fig05_sensitivity_heatmap.png` as the grid's stronger
+gradient running left to right than top to bottom. The headline
+observation -- that Bitcoin's regime shifted during 2026 -- is not an
+artifact of the specific baseline threshold choice.

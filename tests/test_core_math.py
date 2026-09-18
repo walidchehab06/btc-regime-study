@@ -5,6 +5,8 @@ that the hand-written correlation is tested against known cases and against
 pandas.
 """
 
+import math
+
 import numpy as np
 import pandas as pd
 
@@ -69,3 +71,46 @@ def test_rolling_pearson_hand_written_has_no_partial_windows():
 
     assert result.iloc[:4].isna().all()
     assert result.iloc[4:].notna().all()
+
+
+def test_annualized_return_of_a_constant_daily_log_return():
+    daily_log_return = 0.01
+    log_returns = np.full(252, daily_log_return)
+
+    result = core_math.annualized_return(log_returns, trading_days_per_year=252)
+    expected = math.exp(daily_log_return * 252) - 1
+
+    assert np.isclose(result, expected)
+
+
+def test_annualized_return_of_zero_returns_is_zero():
+    log_returns = np.zeros(50)
+
+    assert np.isclose(core_math.annualized_return(log_returns, trading_days_per_year=252), 0.0)
+
+
+def test_annualized_volatility_of_an_alternating_series():
+    # Alternating +/-0.02 has zero mean and a population standard
+    # deviation of exactly 0.02, computable by hand.
+    log_returns = np.array([0.02, -0.02, 0.02, -0.02])
+
+    result = core_math.annualized_volatility(log_returns, trading_days_per_year=252)
+    expected = 0.02 * math.sqrt(252)
+
+    assert np.isclose(result, expected)
+
+
+def test_max_drawdown_of_a_known_price_path():
+    # Peak of 120 at position 1, trough of 80 at position 4: (80-120)/120.
+    prices = np.array([100.0, 120.0, 90.0, 110.0, 80.0, 130.0])
+
+    result = core_math.max_drawdown(prices)
+    expected = (80.0 - 120.0) / 120.0
+
+    assert np.isclose(result, expected)
+
+
+def test_max_drawdown_of_a_strictly_increasing_series_is_zero():
+    prices = np.array([100.0, 110.0, 120.0, 130.0])
+
+    assert np.isclose(core_math.max_drawdown(prices), 0.0)

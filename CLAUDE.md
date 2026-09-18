@@ -27,13 +27,22 @@ at the start of every session before writing any code.
 - Tests: pytest tests/
 
 ## Current phase
-Phase 4 — complete. `src/core_math.py` (hand-written Pearson),
-`src/correlations.py` (pandas + hand-written 90-day Pearson, 30-day
-Pearson, 90-day Spearman, all three BTC pairs), and `src/charts.py`
-(figures 1, 2, 4) built. `python -m src.run_all` now runs Phase
-4 after Phase 3, loading `rolling_correlations` and
-`rolling_correlations_recomputed_check`, then exports all eight analysis
-queries (query 8 added for the correlation reconciliation) to
-outputs/tables/. Queries 7 and 8 both pass (0 mismatches). Headline
-`BTC_GOLD` pair uses GLD, not GC=F (owner's choice, see
-docs/decisions-log.md). Phase 5 (regimes) not started.
+Phase 5 — complete. `src/regimes.py` built: rule-based classification on
+the 90-day Pearson `BTC_NASDAQ`/`BTC_GOLD` correlations
+(`classify_regime`), the 15-trading-day persistence filter
+(`apply_persistence_filter`, merges a short run into the *preceding*
+regime — owner-confirmed, see docs/decisions-log.md), the regime timeline
+and per-day regime tables (`build_regime_periods`,
+`build_regimes_daily`), per-regime statistics (annualized return/
+volatility, max drawdown, avg Fear & Greed — new hand-written functions in
+`src/core_math.py`), and the mandatory section 6.5 sensitivity grid (25
+threshold combinations, `run_sensitivity_grid`). `src/charts.py` gained
+figure 3 (regime timeline) and figure 5 (sensitivity heatmap); figure 1
+now shades regime bands. Chart generation moved out of Phase 4 and into
+its own `run_charts()` step, run after Phase 5, since figures 1/3/5 all
+need `regime_periods` (see docs/decisions-log.md). `python -m src.run_all`
+now runs Phase 5 after Phase 4: 2,078 days classified, 16 regime periods
+after filtering, sensitivity grid confirms the 2026 regime shift survives
+all 25 threshold combinations. Query 9 (regime timeline) added to
+sql/analysis_queries.sql; queries 4, 6, and 9 now return non-vacuous
+results. `pytest tests/` passes (43/43). Phase 6 (validation) not started.

@@ -307,6 +307,105 @@ distinct linestyle; every heatmap cell prints its numeric value).
 Owner consulted: no -- verification performed by inspecting the pipeline
 run's log output and the rendered figures directly.
 
+**2026-09-18 — Persistence filter merges a short run into the preceding
+regime, not the following one**
+What happened: BUILD-SPEC section 6.4 says a run shorter than 15 trading
+days is "relabelled to the surrounding regime" but doesn't say which side
+when the run sits between two *different* regimes.
+Alternatives considered: merge into the following run instead; merge into
+whichever neighbor is longer; split the short run and assign each half to
+its nearer neighbor.
+Reason: merging backward (into the preceding run) reads as "a brief blip
+during an established regime doesn't rewrite the regime that came before
+it" -- the standard forward-fill-from-last-stable-state interpretation.
+The only exception is a short run at the very start of the series, which
+has no preceding run and instead borrows the label of the run that
+follows it. `src/regimes.py:apply_persistence_filter()` implements this
+by repeatedly merging short runs (a merge can make a run long enough to
+then swallow its own next short neighbor) until every surviving run
+clears the minimum.
+Owner consulted: yes -- flagged explicitly in the Phase 5 plan per
+section 13 ("ask before assuming on anything that changes the meaning of
+a result"), since this determines the exact regime boundary dates in the
+timeline table. Confirmed before building.
+
+**2026-09-18 — Regime timeline via a new SQL query 9; per-regime summary
+statistics and the sensitivity grid computed directly in `src/regimes.py`,
+not through `sql/analysis_queries.sql`**
+Alternatives considered: writing every Phase 5 output as a SQL query, to
+keep query export as the single path for everything in outputs/tables/.
+Reason: the regime timeline (`regime_periods` ordered by start date) is a
+direct SQL SELECT, so it became query 9, alongside query 4's aggregated
+per-label view -- the same "make SQL do real work" reasoning already
+applied to queries 1-8. Per-regime statistics (annualized return,
+annualized volatility, maximum drawdown, average Fear & Greed level) mix
+price, return, and sentiment data with the hand-written stat functions in
+`src/core_math.py` -- a pandas computation, not a SQL join, so it's
+written directly to `outputs/tables/regime_summary_statistics.csv`. The
+sensitivity grid re-runs the whole classify-then-filter pipeline 25 times
+with different thresholds, which isn't expressible as a SQL query against
+data already in the database at all -- it recomputes classification, it
+doesn't query stored results -- so it's also Python-computed, to
+`outputs/tables/sensitivity_grid.csv`.
+Owner consulted: no -- implementation detail, decided and logged per
+section 13.
+
+**2026-09-18 — Chart generation moved out of Phase 4 and into its own
+step, run after Phase 5**
+What happened: `charts.main()` was called from inside
+`run_phase_4_correlations()`, generating figures 1, 2, and 4. Figure 1
+now needs `regime_periods` for its shaded bands, and figures 3 and 5 need
+`regime_periods` and `outputs/tables/sensitivity_grid.csv` directly,
+neither of which exists until Phase 5 runs.
+Alternatives considered: regenerating figure 1 a second time after Phase
+5 while leaving the Phase-4 call in place.
+Reason: a single `run_charts()` step, called once after Phase 5 (mirroring
+`run_analysis_queries()`'s move out of Phase 3 in the Phase 3 entry
+above), is simpler than generating figure 1 twice. `charts.main()` now
+generates all five figures in one pass.
+Owner consulted: no -- implementation detail needed to make the Phase 5
+acceptance criterion (figures 3 and 5 render) true without breaking figure
+1. Decided and logged per section 13.
+
+**2026-09-18 — Annualized return on short regime periods flagged as a
+caveat, not suppressed or reformulated**
+What happened: the 20-trading-day `MIXED` period (2020-12-14 to
+2021-01-12, the start of Bitcoin's late-2020 rally) annualizes to a
+return figure in the thousands of percent -- correct given the formula
+(scaling a short window's average daily log return up to a full year),
+but not a usable estimate of anything.
+Alternatives considered: suppressing annualized return for periods under
+some length threshold; reporting cumulative period return instead of
+annualized return for short periods; adding a second config threshold to
+switch formulas.
+Reason not to change the metric: BUILD-SPEC section 6.4 asks for
+annualized return as a per-regime statistic without a length exception,
+and the number is not fabricated -- it is exactly what the stated formula
+produces. Silently changing the definition for some rows and not others
+would make the table harder to trust, not easier. Per section 13 ("when a
+result looks too good, say so and investigate before reporting it"), the
+right response is a caveat in `docs/methodology.md`, not a quiet
+reformulation.
+Owner consulted: no -- an honesty flag on a real computed result, not a
+decision with more than one reasonable outcome. Documented rather than
+silently reported.
+
+**2026-09-18 — Phase 5 (regime classification) signed off as complete**
+Alternatives considered: n/a -- phase closeout, not a build decision.
+Reason: `python -m src.run_all` runs Phase 5 end to end against real
+data -- 2,078 classified days, 16 regime periods after the persistence
+filter (matching the count independently verified against the live
+`rolling_correlations` table before any code was written), the 25-
+combination sensitivity grid runs and the 2026 regime shift survives all
+25, and figures 1 (now with regime bands), 3, and 5 render. `pytest
+tests/` passes (43/43, including the new `tests/test_regimes.py` and the
+new `core_math` stat-function tests in `tests/test_core_math.py`).
+Queries 4, 6, and 9 return non-vacuous results (4, 4, and 16 rows).
+Owner consulted: yes -- thresholds, the persistence filter, and the
+sensitivity grid were confirmed against BUILD-SPEC section 6.4/6.5 and
+against a before/after label-stability comparison before any Phase 5 code
+was written.
+
 **Concepts the owner is currently learning, noted here rather than in code comments:**
 - The manifest's `has_fetched_today` check is a simple date-string
   comparison, not a general-purpose cache invalidation system — worth being
@@ -345,3 +444,19 @@ run's log output and the rendered figures directly.
   depends on what else is in the window it's being compared against, so
   the ranking step has to be redone for every window, not done once up
   front.
+- The persistence filter (`src/regimes.py:apply_persistence_filter()`) is
+  a run-length smoothing technique, not specific to this project: collapse
+  a sequence into (value, length) runs, merge any run below a minimum
+  length into a neighbor, then repeat because a merge can make a run long
+  enough to swallow its own next short neighbor. Worth being able to trace
+  through `tests/test_regimes.py`'s hand-made label sequences by hand,
+  especially the back-to-back-short-runs case, which is the one that
+  actually needs the repeat-until-stable loop rather than a single pass.
+- Why annualizing a short window's return produces an extreme number
+  (`docs/methodology.md`'s regime-classification section, the 20-day
+  `MIXED` period): the formula assumes the window's average daily
+  behavior repeats for a full year, so a genuinely unusual short period
+  gets compounded out to twelve months of that same behavior. This is a
+  property of annualization itself, not a bug -- worth being able to
+  explain why the number is technically correct and still not a useful
+  estimate.

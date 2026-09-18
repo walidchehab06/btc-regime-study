@@ -1,1 +1,5 @@
 regime_label,n_periods,total_days,avg_period_length_days
+RISK_ASSET,4,881,220.25
+IDIOSYNCRATIC,4,648,162.0
+MIXED,6,438,73.0
+HARD_ASSET,2,111,55.5

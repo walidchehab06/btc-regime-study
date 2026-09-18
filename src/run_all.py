@@ -10,7 +10,7 @@ phase of the pipeline (BUILD-SPEC section 12) adds its step here, in order.
 import sqlite3
 import sys
 
-from src import build_panel, charts, config, correlations, database, fetch_fred, fetch_market, fetch_sentiment
+from src import build_panel, charts, config, correlations, database, fetch_fred, fetch_market, fetch_sentiment, regimes
 
 
 def run_phase_1_data_acquisition():
@@ -80,9 +80,10 @@ def run_phase_4_correlations():
     section 12 calls "Phase 4 - Correlations". Runs after Phase 3 has
     created the schema and loaded the base tables, since correlations.py
     opens its own connection to the already-built database rather than
-    rebuilding it. Also generates figures 1, 2, and 4 once
-    rolling_correlations is loaded, per section 12's Phase 4 acceptance
-    criterion.
+    rebuilding it. Figure generation moved out of this step and into
+    run_charts(), which now runs after Phase 5 -- figure 1's regime
+    bands and figures 3 and 5 need regime_periods, which doesn't exist
+    until Phase 5 loads it. See docs/decisions-log.md.
 
     Parameters:
         None.
@@ -92,6 +93,46 @@ def run_phase_4_correlations():
     """
     print("=== Phase 4: Correlations ===")
     correlations.main()
+
+
+def run_phase_5_regimes():
+    """
+    Run the regime-classification step for Phase 5.
+
+    Why it exists: groups regimes.main() under the name BUILD-SPEC
+    section 12 calls "Phase 5 - Regimes". Runs after Phase 4 has loaded
+    rolling_correlations, since regimes.py classifies regimes from the
+    90-day Pearson BTC_NASDAQ and BTC_GOLD correlations Phase 4 computed.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
+    print("=== Phase 5: Regimes ===")
+    regimes.main()
+
+
+def run_charts():
+    """
+    Generate every figure, once every table the figures depend on has
+    been loaded.
+
+    Why it exists: figure 1's regime bands and figures 3 and 5 need
+    regime_periods and outputs/tables/sensitivity_grid.csv, both from
+    Phase 5, so chart generation moved here from inside
+    run_phase_4_correlations() -- the same reasoning as
+    run_analysis_queries() moving out of Phase 3. See
+    docs/decisions-log.md.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
+    print("=== Generating figures ===")
     charts.main()
 
 
@@ -137,6 +178,8 @@ def main():
     run_phase_2_panel_construction()
     run_phase_3_sqlite()
     run_phase_4_correlations()
+    run_phase_5_regimes()
+    run_charts()
     run_analysis_queries()
 
 
