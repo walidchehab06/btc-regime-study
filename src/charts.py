@@ -566,17 +566,116 @@ def plot_regime_label_stability_before_after(
     return save_figure(fig, filename)
 
 
+def plot_validation_comparison(
+    correlations_90d_pearson, comparison_table, filename="fig10_validation_comparison.png"
+):
+    """
+    Figure 10: the self-computed 90-day BTC-Nasdaq and BTC-gold
+    correlation series, with markers annotated at the dates of the
+    publicly reported figures being validated against.
+
+    Why it exists: BUILD-SPEC section 9, figure 10 -- the visual companion
+    to docs/validation.md, showing where on our own correlation lines each
+    published reading falls.
+
+    Parameters:
+        correlations_90d_pearson: pandas.DataFrame indexed by date,
+            columns 'BTC_NASDAQ' and 'BTC_GOLD', from
+            load_rolling_correlations_wide() at window=90, method='pearson'
+            -- the same data figure 1 plots.
+        comparison_table: pandas.DataFrame from
+            src/validation.py:build_comparison_table(), columns including
+            publisher, published_value, published_as_of_date, computed_pair,
+            computed_value.
+        filename: str, output filename under outputs/figures/.
+
+    Returns:
+        pathlib.Path, the saved figure's path.
+    """
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    for pair in ("BTC_NASDAQ", "BTC_GOLD"):
+        ax.plot(
+            correlations_90d_pearson.index,
+            correlations_90d_pearson[pair],
+            label=PAIR_LABELS.get(pair, pair),
+            color=PAIR_COLORS.get(pair, TEXT_PRIMARY),
+            linestyle=PAIR_LINESTYLES.get(pair, "-"),
+            linewidth=1.5,
+        )
+
+    ax.axhline(0, color=BASELINE, linewidth=1, zorder=0)
+    ax.set_ylim(-1.0, 1.0)
+    # Fixed to the correlation series' own date range -- ax.annotate()'s
+    # callout boxes would otherwise pull matplotlib's autoscale well past
+    # the last real data point.
+    ax.set_xlim(correlations_90d_pearson.index.min(), correlations_90d_pearson.index.max())
+    ax.set_xlabel("Date")
+    ax.set_ylabel("90-day Pearson correlation of daily log returns (unitless, -1 to 1)")
+    ax.set_title("Validation: self-computed correlations vs. published institutional figures")
+    ax.grid(True, color=GRIDLINE, linewidth=0.5)
+    ax.legend(loc="upper left", frameon=False)
+
+    # One annotation per distinct (publisher, as-of date) so a date with
+    # both a Nasdaq and a gold reading gets a single combined callout
+    # instead of two overlapping ones.
+    annotation_groups = comparison_table.groupby(["publisher", "published_as_of_date"])
+    text_offsets = itertools.cycle([(-95, 55), (95, -75)])
+    for (publisher, as_of_date), rows in annotation_groups:
+        as_of_timestamp = pd.Timestamp(as_of_date)
+        lines = [f"{publisher}, {as_of_date}"]
+        for _, row in rows.iterrows():
+            pair = row["computed_pair"]
+            ax.scatter(
+                [as_of_timestamp],
+                [row["computed_value"]],
+                color=TEXT_PRIMARY,
+                marker="o",
+                s=28,
+                zorder=3,
+            )
+            lines.append(
+                f"{PAIR_LABELS.get(pair, pair)}: published {row['published_value']:.2f}, "
+                f"computed {row['computed_value']:.2f}"
+            )
+
+        offset_x, offset_y = next(text_offsets)
+        ax.annotate(
+            "\n".join(lines),
+            xy=(as_of_timestamp, rows["computed_value"].mean()),
+            xytext=(offset_x, offset_y),
+            textcoords="offset points",
+            fontsize=7,
+            color=TEXT_PRIMARY,
+            arrowprops=dict(arrowstyle="->", color=TEXT_SECONDARY, linewidth=0.8),
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor=GRIDLINE),
+        )
+
+    date_range = f"{correlations_90d_pearson.index.min().date()} to {correlations_90d_pearson.index.max().date()}"
+    add_caption(
+        fig,
+        f"Source: rolling_correlations (90-day Pearson BTC_NASDAQ, BTC_GOLD), {date_range}, no partial "
+        "windows. Published figures and citations: docs/sources.md. Full comparison, including "
+        "robustness-check readings against Nasdaq-100 and gold futures: outputs/tables/validation_comparison.csv "
+        "and docs/validation.md.",
+    )
+
+    return save_figure(fig, filename)
+
+
 def main():
     """
-    Generate figures 1, 2, 3, 4, and 5 from the already-built database and
-    panel.
+    Generate figures 1, 2, 3, 4, 5, and 10 from the already-built database
+    and panel.
 
     Why it exists: this is the entry point src/run_all.py calls once,
-    after both Phase 4 (correlations) and Phase 5 (regimes) have loaded
-    their tables into btc_regime.db -- figure 1 needs regime_periods for
-    its shaded bands, and figures 3 and 5 need regime_periods and
-    outputs/tables/sensitivity_grid.csv directly, so this can no longer
-    run right after Phase 4 alone. See docs/decisions-log.md.
+    after Phase 4 (correlations), Phase 5 (regimes), and Phase 6
+    (validation) have loaded their tables into btc_regime.db -- figure 1
+    needs regime_periods for its shaded bands, figures 3 and 5 need
+    regime_periods and outputs/tables/sensitivity_grid.csv directly, and
+    figure 10 needs outputs/tables/validation_comparison.csv from Phase 6,
+    so this can no longer run right after Phase 4 alone. See
+    docs/decisions-log.md.
 
     Parameters:
         None.
@@ -609,6 +708,9 @@ def main():
 
         sensitivity_grid = pd.read_csv(config.SENSITIVITY_GRID_TABLE_PATH)
         plot_sensitivity_heatmap(sensitivity_grid)
+
+        comparison_table = pd.read_csv(config.VALIDATION_COMPARISON_TABLE_PATH)
+        plot_validation_comparison(correlations_90d_pearson, comparison_table)
     finally:
         conn.close()
 

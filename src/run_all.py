@@ -10,7 +10,18 @@ phase of the pipeline (BUILD-SPEC section 12) adds its step here, in order.
 import sqlite3
 import sys
 
-from src import build_panel, charts, config, correlations, database, fetch_fred, fetch_market, fetch_sentiment, regimes
+from src import (
+    build_panel,
+    charts,
+    config,
+    correlations,
+    database,
+    fetch_fred,
+    fetch_market,
+    fetch_sentiment,
+    regimes,
+    validation,
+)
 
 
 def run_phase_1_data_acquisition():
@@ -114,6 +125,26 @@ def run_phase_5_regimes():
     regimes.main()
 
 
+def run_phase_6_validation():
+    """
+    Run the validation step for Phase 6.
+
+    Why it exists: groups validation.main() under the name BUILD-SPEC
+    section 12 calls "Phase 6 - Validation". Runs after Phase 5 has
+    loaded rolling_correlations, which validation.py's comparison table
+    reads from, and before run_charts(), which needs
+    outputs/tables/validation_comparison.csv to exist for figure 10.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
+    print("=== Phase 6: Validation ===")
+    validation.main()
+
+
 def run_charts():
     """
     Generate every figure, once every table the figures depend on has
@@ -121,7 +152,8 @@ def run_charts():
 
     Why it exists: figure 1's regime bands and figures 3 and 5 need
     regime_periods and outputs/tables/sensitivity_grid.csv, both from
-    Phase 5, so chart generation moved here from inside
+    Phase 5, and figure 10 needs outputs/tables/validation_comparison.csv
+    from Phase 6, so chart generation moved here from inside
     run_phase_4_correlations() -- the same reasoning as
     run_analysis_queries() moving out of Phase 3. See
     docs/decisions-log.md.
@@ -179,6 +211,7 @@ def main():
     run_phase_3_sqlite()
     run_phase_4_correlations()
     run_phase_5_regimes()
+    run_phase_6_validation()
     run_charts()
     run_analysis_queries()
 

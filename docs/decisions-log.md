@@ -406,6 +406,81 @@ sensitivity grid were confirmed against BUILD-SPEC section 6.4/6.5 and
 against a before/after label-stability comparison before any Phase 5 code
 was written.
 
+**2026-09-18 — `rolling_correlations_validation` as its own table, not appended to `rolling_correlations`**
+Alternatives considered: giving `BTC_NASDAQ_NDX` and `BTC_GOLD_GCF` new
+pair labels and loading them into the existing `rolling_correlations`
+table alongside the headline pairs.
+Reason: `database.py:load_dataframe_to_table()` asserts the table's
+*total* row count equals the number of rows just inserted -- an assertion
+that only holds when the table was empty before the call. By the time
+Phase 6 runs, `rolling_correlations` already holds Phase 4's rows, so
+appending into it would trip a false assertion failure (or require
+weakening a working, tested check). A dedicated table follows the
+precedent `rolling_correlations_recomputed_check` already set, and keeps
+Phase 6's alternate-instrument series out of every analysis query that
+filters `rolling_correlations` by pair, none of which expect them.
+Owner consulted: no -- a correctness constraint found while reading
+`database.py`, not a judgment call.
+
+**2026-09-18 — No SQL-level hand-written-check table for the Phase 6 validation pairs**
+Alternatives considered: mirroring Phase 4 exactly, with a second new
+table (`rolling_correlations_validation_recomputed_check`) and a tenth
+analysis query reconciling it.
+Reason: the pandas/hand-written agreement is still computed and asserted
+at run time (same two functions, same `CORRELATION_TOLERANCE`, same
+`assert_pandas_and_hand_written_agree()` call Phase 4 uses) -- but
+persisting a second reconciliation table would add SQL surface with no
+analysis question that needs it, since `BTC_NASDAQ_NDX`/`BTC_GOLD_GCF` are
+one-off robustness checks against specific published dates, not new
+headline figures BUILD-SPEC section 6.3's dual-implementation mandate is
+scoped to.
+Owner consulted: no.
+
+**2026-09-18 — Bitwise's "as-of" date is 2026-08-31 (data-through), not 2026-09-03 (report-publish)**
+Alternatives considered: using the 2026-09-03 publish date; showing both
+dates as full, separate comparison rows.
+Reason: Bitwise's own report states its Bloomberg data runs through
+August 31; comparing our correlation on that exact date is the
+methodologically correct reading of "as-of," not the date a news outlet
+happened to cover it. The 09-03 reading is shown as a one-line footnote in
+`docs/validation.md` instead of a second full row, since it's the same
+underlying claim, not a fifth published figure.
+Owner consulted: yes -- confirmed via AskUserQuestion before writing
+`docs/validation.md`.
+
+**2026-09-18 — Bitwise's Nasdaq figure uses 0.30 (both fetched outlets), with the 0.33 outlet variance disclosed as a footnote, not a fifth comparison row**
+Alternatives considered: treating 0.33 (The Block) as a separate claim
+from 0.30 (24-7 Wall St.), each with its own row.
+Reason: both numbers describe the same underlying Bitwise report; treating
+outlet-to-outlet rounding/paraphrase variance as two different published
+claims would double-count one reading as two. Disclosed directly in
+`docs/sources.md` instead, per CLAUDE.md's fabrication rule -- the goal is
+to be honest about what the sources actually say, not to manufacture more
+comparison rows.
+Owner consulted: no.
+
+**2026-09-18 — Phase 6 (validation) complete: `docs/sources.md`, `docs/validation.md`, `src/validation.py`, figure 10**
+Alternatives considered: n/a -- this is a phase closeout, not a build
+decision.
+Reason: `python -m src.run_all` runs Phase 6 end to end against real data,
+between Phase 5 and figure generation -- `BTC_NASDAQ_NDX` and
+`BTC_GOLD_GCF` computed at the 90-day Pearson window (2,078 non-NaN values
+each, pandas and hand-written agree within `CORRELATION_TOLERANCE`),
+loaded into the new `rolling_correlations_validation` table, and the
+4-row `outputs/tables/validation_comparison.csv` built from real,
+independently sourced published figures (see `docs/sources.md`) compared
+against our own computed values. Both Bitwise robustness-check rows land
+far closer to the published figure than the headline pair does (gold:
++0.053 delta on GLD vs. -0.007 on GC=F; Nasdaq: +0.050 delta on Composite
+vs. +0.016 on Nasdaq-100), which is real evidence the named instrument
+difference explains most of the gap, not an assumption. Figure 10 renders
+with explicit `ax.set_xlim()` pinned to the correlation series' own date
+range, since `ax.annotate()`'s callout boxes otherwise pull matplotlib's
+autoscale well past the last real data point. `pytest tests/` passes
+(47/47, including the new `tests/test_validation.py`).
+Owner consulted: yes -- the Bitwise as-of date and figure 10's x-axis
+scope were confirmed via AskUserQuestion before implementation.
+
 **Concepts the owner is currently learning, noted here rather than in code comments:**
 - The manifest's `has_fetched_today` check is a simple date-string
   comparison, not a general-purpose cache invalidation system — worth being
@@ -460,3 +535,18 @@ was written.
   property of annualization itself, not a bug -- worth being able to
   explain why the number is technically correct and still not a useful
   estimate.
+- Why a correctly-computed correlation still only approximately reproduces
+  a published figure (`docs/validation.md`): the math isn't the source of
+  the gap -- which exact instrument (GLD vs. GC=F, Composite vs.
+  Nasdaq-100), which data vendor, and which exact as-of date a published
+  figure used all move the number independently of any bug, and the
+  Bitwise robustness-check rows are the clearest demonstration: the same
+  formula, on the same day, against a different but equally reasonable
+  instrument, lands an order of magnitude closer to the published value.
+- Why citing secondary journalism about a research report is different
+  from citing the report itself (`docs/sources.md`'s "Limitations"
+  section): a news outlet's paraphrase of a number can drift from the
+  original (the 0.30-vs-0.33 Bitwise Nasdaq figure is a real example of
+  this), so a citation to "Outlet X, reporting Y's research" is a weaker
+  and more honest claim than a citation to "Y's research" directly, and
+  the two should never be written as if they were the same thing.

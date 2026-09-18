@@ -177,3 +177,100 @@ FIGURE_DPI = 150
 REGIME_SUMMARY_STATS_TABLE_PATH = OUTPUTS_TABLES_DIR / "regime_summary_statistics.csv"
 SENSITIVITY_GRID_TABLE_PATH = OUTPUTS_TABLES_DIR / "sensitivity_grid.csv"
 REGIME_LABEL_STABILITY_TABLE_PATH = OUTPUTS_TABLES_DIR / "regime_label_stability_before_after.csv"
+
+# --- Validation (BUILD-SPEC section 3, section 12 Phase 6) ---
+# The two alternate series CORRELATION_PAIRS' comment already points to:
+# Nasdaq-100 in place of Nasdaq Composite, gold futures in place of the
+# GLD ETF. Computed only at CORRELATION_WINDOW_HEADLINE (90 days) -- these
+# exist to test a specific published-figure discrepancy on a specific
+# date, not to be a second set of headline series, so there's no 30-day or
+# Spearman variant. Kept out of CORRELATION_PAIRS/rolling_correlations
+# entirely -- see docs/decisions-log.md for why they get their own table.
+VALIDATION_CORRELATION_PAIRS = {
+    "BTC_NASDAQ_NDX": ("log_return_BTC-USD", "log_return_^NDX"),
+    "BTC_GOLD_GCF": ("log_return_BTC-USD", "log_return_GC=F"),
+}
+
+# One fixed sentence per methodological reason a computed correlation
+# differs from a published one -- BUILD-SPEC section 3's list of known
+# legitimate causes, applied to the specific comparisons below. Kept here,
+# not written inline in src/validation.py, so every explanation string is
+# a config-level fact instead of a literal buried in code (section 11).
+VALIDATION_EXPLANATION_TEXT = {
+    "nasdaq_index_and_vendor_ambiguity": (
+        "The cited article does not say whether Grayscale used the Nasdaq "
+        "Composite (^IXIC, our headline series) or the Nasdaq-100; it also "
+        "does not state which data vendor or exact as-of date Grayscale's "
+        "own figure is computed from, so some of this gap is unexplained "
+        "vendor/window ambiguity rather than a named methodological choice."
+    ),
+    "gold_vendor_and_window_ambiguity": (
+        "The cited article does not state which gold price series "
+        "(spot, futures, or an ETF) or which data vendor Grayscale's "
+        "figure is computed from, nor its exact as-of date -- our GLD-based "
+        "series is one reasonable reading among several, not a forced match."
+    ),
+    "gold_etf_vs_futures": (
+        "Bitwise's reported figure is not tied to a named instrument; GLD "
+        "(our headline series) and GC=F (gold futures) trade different "
+        "hours and can diverge on a given day's correlation reading -- the "
+        "robustness-check column shows whether GC=F lands closer."
+    ),
+    "nasdaq_composite_vs_100": (
+        "Bitwise's figure is explicitly reported against the Nasdaq-100, "
+        "while our headline BTC_NASDAQ series uses the Nasdaq Composite "
+        "(^IXIC) -- the robustness-check column recomputes the same day "
+        "against the Nasdaq-100 to test whether that accounts for the gap."
+    ),
+}
+
+# One dict per published claim being reproduced in docs/validation.md.
+# published_as_of_date is the date the source's own underlying data ends
+# (not the date the article was published), per the owner-confirmed
+# reading of "as-of" -- see docs/decisions-log.md. robustness_computed_pair
+# is a VALIDATION_CORRELATION_PAIRS key, or None if no alternate-instrument
+# check applies to that claim.
+PUBLISHED_VALIDATION_FIGURES = [
+    {
+        "comparison_id": "grayscale_nasdaq",
+        "metric_label": "BTC-Nasdaq 90-day Pearson correlation",
+        "publisher": "Grayscale Research (via Bloomingbit)",
+        "published_value": 0.33,
+        "published_as_of_date": "2026-09-02",
+        "primary_computed_pair": "BTC_NASDAQ",
+        "robustness_computed_pair": None,
+        "explanation_key": "nasdaq_index_and_vendor_ambiguity",
+    },
+    {
+        "comparison_id": "grayscale_gold",
+        "metric_label": "BTC-gold 90-day Pearson correlation",
+        "publisher": "Grayscale Research (via Bloomingbit)",
+        "published_value": 0.50,
+        "published_as_of_date": "2026-09-02",
+        "primary_computed_pair": "BTC_GOLD",
+        "robustness_computed_pair": None,
+        "explanation_key": "gold_vendor_and_window_ambiguity",
+    },
+    {
+        "comparison_id": "bitwise_gold",
+        "metric_label": "BTC-gold 90-day Pearson correlation (six-year high)",
+        "publisher": "Bitwise (via The Block / 24-7 Wall St.)",
+        "published_value": 0.50,
+        "published_as_of_date": "2026-08-31",
+        "primary_computed_pair": "BTC_GOLD",
+        "robustness_computed_pair": "BTC_GOLD_GCF",
+        "explanation_key": "gold_etf_vs_futures",
+    },
+    {
+        "comparison_id": "bitwise_nasdaq",
+        "metric_label": "BTC-Nasdaq-100 90-day Pearson correlation (one-year low)",
+        "publisher": "Bitwise (via The Block / 24-7 Wall St.)",
+        "published_value": 0.30,
+        "published_as_of_date": "2026-08-31",
+        "primary_computed_pair": "BTC_NASDAQ",
+        "robustness_computed_pair": "BTC_NASDAQ_NDX",
+        "explanation_key": "nasdaq_composite_vs_100",
+    },
+]
+
+VALIDATION_COMPARISON_TABLE_PATH = OUTPUTS_TABLES_DIR / "validation_comparison.csv"

@@ -105,3 +105,21 @@ CREATE TABLE IF NOT EXISTS rolling_correlations_recomputed_check (
     PRIMARY KEY (date, pair, window, method)
 );
 CREATE INDEX IF NOT EXISTS idx_rolling_correlations_recomputed_check_date ON rolling_correlations_recomputed_check(date);
+
+-- Phase 6 (validation) alternate-instrument correlations: BTC vs Nasdaq-100
+-- and BTC vs gold futures (GC=F), used only to compare against published
+-- institutional figures in docs/validation.md. Kept as its own table,
+-- separate from rolling_correlations, because
+-- database.load_dataframe_to_table()'s row-count assertion only holds for
+-- a table that is empty before the insert -- rolling_correlations is
+-- already populated by Phase 4 by the time Phase 6 runs. See
+-- docs/decisions-log.md.
+CREATE TABLE IF NOT EXISTS rolling_correlations_validation (
+    date TEXT NOT NULL,
+    pair TEXT NOT NULL,
+    window INTEGER NOT NULL,
+    method TEXT NOT NULL,
+    correlation REAL,
+    PRIMARY KEY (date, pair, window, method)
+);
+CREATE INDEX IF NOT EXISTS idx_rolling_correlations_validation_date ON rolling_correlations_validation(date);
