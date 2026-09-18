@@ -93,11 +93,11 @@ def test_build_returns_recomputed_check_matches_hand_computed_log_return():
     assert ticker_rows["log_return"].iloc[1] == np.log(close_day2 / close_day1)
 
 
-def test_split_analysis_queries_finds_exactly_seven_queries():
+def test_split_analysis_queries_finds_every_query():
     sql_text = config.SQL_ANALYSIS_QUERIES_PATH.read_text()
     queries = database.split_analysis_queries(sql_text)
 
-    assert len(queries) == 7
+    assert len(queries) == len(config.ANALYSIS_QUERY_EXPORT_FILENAMES)
     for query_number, query_text in enumerate(queries, start=1):
         assert query_text.startswith(f"-- Query {query_number}:")
 

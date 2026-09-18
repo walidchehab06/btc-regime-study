@@ -90,3 +90,18 @@ CREATE TABLE IF NOT EXISTS returns_daily_recomputed_check (
     PRIMARY KEY (date, ticker)
 );
 CREATE INDEX IF NOT EXISTS idx_returns_daily_recomputed_check_date ON returns_daily_recomputed_check(date);
+
+-- Staging table for the Phase 4 reconciliation check (analysis query 8).
+-- Holds the 90-day Pearson BTC correlations recomputed independently with
+-- src/core_math.py's hand-written NumPy function, per BUILD-SPEC section
+-- 6.3 -- a separate code path from the pandas .rolling().corr() values
+-- stored in rolling_correlations. See docs/decisions-log.md.
+CREATE TABLE IF NOT EXISTS rolling_correlations_recomputed_check (
+    date TEXT NOT NULL,
+    pair TEXT NOT NULL,
+    window INTEGER NOT NULL,
+    method TEXT NOT NULL,
+    correlation REAL,
+    PRIMARY KEY (date, pair, window, method)
+);
+CREATE INDEX IF NOT EXISTS idx_rolling_correlations_recomputed_check_date ON rolling_correlations_recomputed_check(date);

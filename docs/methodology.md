@@ -92,3 +92,57 @@ neither a data quality problem:
   history, not a scheduled holiday. Left as `NaN` rather than forward-filled
   — sentiment isn't in BUILD-SPEC section 5.2's forward-fill list, and
   extending that list by assumption for one row wasn't worth it.
+
+## Rolling correlations (BUILD-SPEC section 6.3)
+
+Bitcoin's relationship to Nasdaq, gold, and the dollar index is measured
+with a **rolling Pearson correlation of daily log returns** — the
+correlation recomputed on a moving window of trading days, so it can
+change over time instead of collapsing the whole study period into one
+number. Two window lengths are computed in parallel: 30 trading days,
+which reacts quickly but is noisy, and 90 trading days, which is smoother
+and is the window most published institutional figures use (see
+`docs/sources.md`). Neither window is allowed a partial start: the first
+90-day figure needs 90 full days of returns behind it, not fewer.
+
+**Two independent implementations of the 90-day Pearson correlation.**
+Section 6.3 requires the headline 90-day figure computed twice: once by
+calling pandas' own `.rolling().corr()`, and once by a function I wrote by
+hand in `src/core_math.py` that computes the covariance and the two
+standard deviations directly from the definition,
+`corr(x, y) = cov(x, y) / (std(x) * std(y))`. The two are asserted to
+agree within `1e-9` on every date before either is trusted. The point of
+the hand-written version isn't that pandas is unreliable — it's that I
+need to be able to explain what a correlation coefficient actually
+measures, not just which library method I called.
+
+**Spearman as a robustness check, 90-day window only.** Pearson
+correlation is sensitive to outliers, and Bitcoin's return series has
+extreme days. Spearman rank correlation is the standard robustness check:
+instead of correlating the raw return values, it correlates their
+*ranks*. Concretely, `rolling_spearman()` in `src/correlations.py` ranks
+the two series' values **within each 90-day window separately** (not once
+over the whole series — a value's rank depends on what else is in that
+window) and then calls the same hand-written Pearson function on those
+ranks. This works because Spearman correlation is, by definition, the
+Pearson correlation of ranks; it avoids adding a `scipy` dependency for a
+single function, and it means the same covariance-based function does
+double duty. I verified this with a test the ordinary crypto data
+wouldn't have caught by construction: a series `y = x**3` is a perfectly
+predictable (monotonic) function of `x`, but not a linear one, so Pearson
+correlation between them is high but not exactly 1.0, while Spearman —
+which only sees rank order — comes out exactly 1.0. That gap is the whole
+reason the two methods are reported separately.
+
+**Three headline pairs, and which gold and dollar series.** The pairs
+tracked are `BTC_NASDAQ` (BTC vs `^IXIC`), `BTC_GOLD`, and `BTC_DXY` (BTC
+vs `DX-Y.NYB`, the ticker figure 1 means by "DXY"). For the gold pair, the
+headline series is **`GLD`, the gold ETF, not `GC=F` gold futures** —
+`GLD` trades on the same calendar the whole panel is anchored to (BUILD-
+SPEC section 6.1), while `GC=F` futures trade different hours, which would
+introduce a second calendar mismatch on top of the one already handled for
+Bitcoin. `GC=F` remains available as the section 5.1 robustness check
+against `GLD`, computed separately in the Phase 6 validation step, not
+under the `BTC_GOLD` label. This was a direct question to the project
+owner per BUILD-SPEC section 13 ("which gold series is the headline"), not
+a default I chose silently.

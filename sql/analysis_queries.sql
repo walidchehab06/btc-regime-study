@@ -3,9 +3,8 @@
 -- by a comment stating the question in English. src/database.py runs each
 -- one and writes its result to outputs/tables/ as a CSV.
 --
--- Queries 1, 2, 4, and 5 depend on rolling_correlations, which is empty
--- until Phase 4 runs, and will return 0 rows honestly until then. Query 6
--- depends on regimes, empty until Phase 5. See docs/decisions-log.md.
+-- Queries 4 and 6 depend on regimes/regime_periods, empty until Phase 5,
+-- and will return 0 rows honestly until then. See docs/decisions-log.md.
 
 -- Query 1: By calendar year, what was the average 90-day BTC-Nasdaq
 -- correlation and the average 90-day BTC-gold correlation?
@@ -173,4 +172,27 @@ FROM returns_daily a
 JOIN returns_daily_recomputed_check b
     ON a.date = b.date AND a.ticker = b.ticker
 WHERE ABS(a.log_return - b.log_return) > 0.000000001
+ORDER BY abs_difference DESC;
+
+-- Query 8: Reconciliation check. Does the 90-day Pearson correlation
+-- stored in rolling_correlations (computed with pandas .rolling().corr())
+-- match the same correlation recomputed independently with
+-- src/core_math.py's hand-written NumPy function? This is the BUILD-SPEC
+-- section 6.3 check src/correlations.py already asserts in-memory before
+-- loading either table; this query re-proves it at the SQL level, the
+-- literal "join proving that the correlation values stored in SQLite
+-- match those computed in Pandas" BUILD-SPEC section 8 describes.
+-- src/database.py asserts this query returns zero rows after every load.
+SELECT
+    a.date,
+    a.pair,
+    a.correlation AS correlation_pandas,
+    b.correlation AS correlation_hand_written,
+    ABS(a.correlation - b.correlation) AS abs_difference
+FROM rolling_correlations a
+JOIN rolling_correlations_recomputed_check b
+    ON a.date = b.date AND a.pair = b.pair AND a.window = b.window AND a.method = b.method
+WHERE a.window = 90
+  AND a.method = 'pearson'
+  AND ABS(a.correlation - b.correlation) > 0.000000001
 ORDER BY abs_difference DESC;

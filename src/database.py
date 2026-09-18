@@ -256,6 +256,16 @@ def split_analysis_queries(sql_text):
     return queries
 
 
+
+# Query numbers that must return zero rows -- each is a reconciliation
+# check between two independently computed versions of the same values.
+# Query 7 compares the ETL-loaded returns against a row-by-row recomputed
+# check table (Phase 3); query 8 does the same for rolling correlations
+# against a hand-recomputed check table (Phase 4). See
+# docs/decisions-log.md.
+RECONCILIATION_QUERY_NUMBERS = {7, 8}
+
+
 def run_analysis_queries_and_export(conn):
     """
     Run every query in sql/analysis_queries.sql and write its result to
@@ -263,8 +273,12 @@ def run_analysis_queries_and_export(conn):
 
     Why it exists: BUILD-SPEC section 8 requires every analysis query's
     result to be exported so it has a file behind it. Also enforces that
-    query 7 (the reconciliation check) actually returns zero mismatches,
-    per section 12's Phase 3 acceptance criterion.
+    every reconciliation query (RECONCILIATION_QUERY_NUMBERS) actually
+    returns zero mismatches. Called once, after every table the queries
+    depend on (rolling_correlations from Phase 4, regimes/regime_periods
+    from Phase 5) has been loaded -- not from inside database.main(),
+    which only builds the schema and the Phase 3 base tables. See
+    docs/decisions-log.md.
 
     Parameters:
         conn: sqlite3.Connection, the open, already-loaded database connection.
@@ -273,8 +287,8 @@ def run_analysis_queries_and_export(conn):
         None.
 
     Raises:
-        AssertionError if the reconciliation query (query 7) finds any
-        mismatch above config.RECONCILIATION_TOLERANCE.
+        AssertionError if any reconciliation query finds a mismatch above
+        its tolerance.
     """
     config.OUTPUTS_TABLES_DIR.mkdir(parents=True, exist_ok=True)
     sql_text = config.SQL_ANALYSIS_QUERIES_PATH.read_text()
@@ -293,23 +307,27 @@ def run_analysis_queries_and_export(conn):
         result_df.to_csv(export_path, index=False)
         print(f"[database] query {query_number}: {len(result_df)} rows -> {export_path}")
 
-        if query_number == 7:
+        if query_number in RECONCILIATION_QUERY_NUMBERS:
             assert len(result_df) == 0, (
-                "query 7 (reconciliation check) found "
-                f"{len(result_df)} mismatched log-return value(s) between the ETL "
-                "load and the independently recomputed check table -- see "
-                f"{export_path} for which ones. Investigate before proceeding."
+                f"query {query_number} (reconciliation check) found "
+                f"{len(result_df)} mismatch(es) -- see {export_path} for which ones. "
+                "Investigate before proceeding."
             )
-            print("[database] query 7 (reconciliation check) passed: 0 mismatches")
+            print(f"[database] query {query_number} (reconciliation check) passed: 0 mismatches")
 
 
 def main():
     """
-    Build data/processed/btc_regime.db from panel_daily.parquet and run
-    the analysis queries.
+    Build data/processed/btc_regime.db from panel_daily.parquet and load
+    the Phase 3 base tables.
 
     Why it exists: this is the entry point src/run_all.py calls for
-    Phase 3 (BUILD-SPEC section 12).
+    Phase 3 (BUILD-SPEC section 12). Does not run the analysis queries --
+    that step moved to run_analysis_queries_and_export(), called once from
+    run_all.py after Phase 4 (correlations) and Phase 5 (regimes) have
+    also loaded their tables into this same database, so queries 1, 2, 4,
+    5, 6, and 8 see real data instead of running vacuously against empty
+    tables. See docs/decisions-log.md.
 
     Parameters:
         None.
@@ -347,7 +365,6 @@ def main():
         )
 
         conn.commit()
-        run_analysis_queries_and_export(conn)
     finally:
         conn.close()
 

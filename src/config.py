@@ -87,10 +87,12 @@ OUTPUTS_TABLES_DIR = Path("outputs/tables")
 # floating-point rounding rather than a real data-integrity problem.
 RECONCILIATION_TOLERANCE = 1e-9
 
-# Filenames the seven analysis queries in sql/analysis_queries.sql export
-# to, in the same order the queries appear in that file. Keeping the list
-# here, rather than inline in database.py, follows section 11's rule that
-# no output naming is left as a magic string buried in analysis code.
+# Filenames the analysis queries in sql/analysis_queries.sql export to, in
+# the same order the queries appear in that file. Keeping the list here,
+# rather than inline in database.py, follows section 11's rule that no
+# output naming is left as a magic string buried in analysis code. Query 8
+# (the rolling-correlation reconciliation) was added in Phase 4 -- see
+# docs/decisions-log.md.
 ANALYSIS_QUERY_EXPORT_FILENAMES = [
     "query_01_avg_correlation_by_year.csv",
     "query_02_largest_btc_gold_correlation_moves.csv",
@@ -99,4 +101,40 @@ ANALYSIS_QUERY_EXPORT_FILENAMES = [
     "query_05_correlation_crossover_days.csv",
     "query_06_btc_volatility_by_regime.csv",
     "query_07_returns_reconciliation_check.csv",
+    "query_08_correlation_reconciliation_check.csv",
 ]
+
+# --- Rolling correlations (BUILD-SPEC section 6.3, section 12 Phase 4) ---
+# Trading-day window lengths. 90 is the headline window (section 6.3: it
+# matches most published institutional figures); 30 is shown alongside it
+# to demonstrate how much the window choice matters (figure 2).
+CORRELATION_WINDOW_SHORT = 30
+CORRELATION_WINDOW_HEADLINE = 90
+
+# Pair label -> (series_a column, series_b column) in panel_daily.parquet.
+# Labels match the strings sql/analysis_queries.sql's queries 1, 2, 5, and 8
+# already filter on. BTC_GOLD uses GLD, not GC=F: GLD trades on the same
+# Nasdaq-anchored calendar as the rest of the panel, while GC=F futures
+# trade different hours -- see docs/decisions-log.md. GC=F remains
+# available as the section 5.1 robustness check, computed separately in
+# Phase 6 validation under a different pair label.
+CORRELATION_PAIRS = {
+    "BTC_NASDAQ": ("log_return_BTC-USD", "log_return_^IXIC"),
+    "BTC_GOLD": ("log_return_BTC-USD", "log_return_GLD"),
+    "BTC_DXY": ("log_return_BTC-USD", "log_return_DX-Y.NYB"),
+}
+
+# The pair figure 2 (window-sensitivity) plots: the one the published
+# comparisons in BUILD-SPEC section 3 center on.
+WINDOW_SENSITIVITY_PAIR = "BTC_NASDAQ"
+
+# Query 7's RECONCILIATION_TOLERANCE is scoped to the Phase 3 returns
+# check; this is a separate constant because correlation values go through
+# more floating-point operations (covariance, two standard deviations)
+# than a single log-return recomputation, so a distinct tolerance is worth
+# being able to tune independently -- see docs/decisions-log.md.
+CORRELATION_TOLERANCE = 1e-9
+
+# --- Charts (BUILD-SPEC section 9) ---
+OUTPUTS_FIGURES_DIR = Path("outputs/figures")
+FIGURE_DPI = 150

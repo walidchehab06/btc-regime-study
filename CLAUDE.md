@@ -27,8 +27,13 @@ at the start of every session before writing any code.
 - Tests: pytest tests/
 
 ## Current phase
-Phase 3 — complete. `sql/schema.sql`, `src/database.py`, and
-`sql/analysis_queries.sql` built; `python -m src.run_all` loads
-panel_daily.parquet into data/processed/btc_regime.db and exports all
-seven analysis queries to outputs/tables/. Query 7's reconciliation check
-passes (0 mismatches). Phase 4 (correlations) not started.
+Phase 4 — complete. `src/core_math.py` (hand-written Pearson),
+`src/correlations.py` (pandas + hand-written 90-day Pearson, 30-day
+Pearson, 90-day Spearman, all three BTC pairs), and `src/charts.py`
+(figures 1, 2, 4) built. `python -m src.run_all` now runs Phase
+4 after Phase 3, loading `rolling_correlations` and
+`rolling_correlations_recomputed_check`, then exports all eight analysis
+queries (query 8 added for the correlation reconciliation) to
+outputs/tables/. Queries 7 and 8 both pass (0 mismatches). Headline
+`BTC_GOLD` pair uses GLD, not GC=F (owner's choice, see
+docs/decisions-log.md). Phase 5 (regimes) not started.

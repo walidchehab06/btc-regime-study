@@ -207,6 +207,106 @@ now:** query 3's sentiment-bucket grouping includes one row with a blank
 Fear & Greed gap (see the Phase 2 entry above) surfacing again downstream,
 not a new data problem.
 
+**2026-09-18 — GLD, not GC=F, is the headline `BTC_GOLD` pair**
+Alternatives considered: `GC=F` gold futures (BUILD-SPEC section 5.1 calls
+it the "hard-asset benchmark" and frames `GLD` only as a robustness check
+against it).
+Reason: `GLD` trades on the same Nasdaq-anchored calendar the rest of the
+panel already uses (section 6.1), so no second calendar-alignment issue is
+introduced on top of Bitcoin's. `GC=F` remains available as the section
+5.1 robustness check, to be computed separately in Phase 6 validation
+under a different pair label, not stored as `BTC_GOLD`.
+Owner consulted: yes — section 13 explicitly names "which gold series is
+the headline" as a decision requiring the owner's input; asked directly,
+owner chose GLD.
+
+**2026-09-18 — Spearman computed by ranking within each window and reusing
+the hand-written Pearson function, no `scipy` dependency added**
+Alternatives considered: `scipy.stats.spearmanr` (the standard library
+call for this); ranking the whole series once, then running pandas'
+`.rolling().corr()` on the global ranks.
+Reason against the global-rank shortcut: it is not mathematically the same
+calculation. Spearman correlation over a window is the Pearson correlation
+of that window's own local ranks (1..window_size); global ranks sliced to
+a window preserve the same relative order but not the same spacing between
+values, and Pearson correlation is not invariant to that kind of
+transform. Verified this distinction with a test (`y = x**3`, a monotonic
+but non-linear pair): Spearman correctly returns 1.0, Pearson does not.
+Reason for the chosen approach over `scipy`: BUILD-SPEC section 11 treats
+the package list as a ceiling ("nothing else without asking"); ranking a
+90-day window with `pandas.Series.rank()` and calling the already-written
+`core_math.pearson_correlation()` on the ranks needed no new dependency
+and let the hand-written Pearson function do double duty, which is also
+easier to explain in an interview than a second library call.
+Owner consulted: no — implementation detail, and the no-new-dependency
+default follows directly from section 11.
+
+**2026-09-18 — `CORRELATION_TOLERANCE` kept separate from
+`RECONCILIATION_TOLERANCE`**
+Alternatives considered: reusing `config.RECONCILIATION_TOLERANCE` (the
+Phase 3 constant for the returns reconciliation check) for the Phase 4
+pandas-vs-hand-written correlation assertion too.
+Reason: both are currently `1e-9` and could theoretically diverge later --
+a correlation coefficient runs through more floating-point operations
+(two means, two sums of squared deviations, a division) than a single
+log-return recomputation, so the two checks are logically different
+tolerances that happen to share a value today. Keeping them as separate
+`config.py` constants keeps that difference a one-line edit if either
+needs loosening.
+Owner consulted: no.
+
+**2026-09-18 — `database.main()` no longer runs the analysis-query export;
+moved to a new `run_all.run_analysis_queries()` step at the end of the
+pipeline**
+Alternatives considered: leaving `run_analysis_queries_and_export()` inside
+`database.main()`, called from Phase 3, as it was in Phase 3's own build.
+Reason: with that arrangement, queries 1, 2, 4, 5, 6, and 8 -- everything
+depending on `rolling_correlations` or `regimes`/`regime_periods` -- would
+keep exporting 0 rows even after Phase 4 populates `rolling_correlations`,
+since Phase 3 runs before Phase 4 in `run_all.main()`. Query export now
+runs once, at the very end of the pipeline, after every table any query
+depends on has been loaded. `database.py` still owns
+`run_analysis_queries_and_export()` and `RECONCILIATION_QUERY_NUMBERS`;
+only the call site moved.
+Owner consulted: no -- implementation detail needed to make Phase 4's own
+acceptance criterion (query results actually populated) true.
+
+**2026-09-18 — Query 8 added: the literal correlation-value reconciliation
+BUILD-SPEC section 8 describes, deferred from Phase 3**
+What happened: the Phase 3 decisions-log entry for query 7 already flagged
+that section 8's literal wording for that slot -- "a join proving that the
+correlation values stored in SQLite match those computed in Pandas" -- had
+to wait for Phase 4 to populate `rolling_correlations`. `src/correlations.py`
+now also writes the 90-day Pearson hand-written values to a second table,
+`rolling_correlations_recomputed_check` (schema mirrors
+`rolling_correlations`), and query 8 joins the two and asserts zero rows
+differ by more than `1e-9` -- the same check `assert_pandas_and_hand_written_agree()`
+already does in memory before either table is loaded, re-proved at the SQL
+level. `config.ANALYSIS_QUERY_EXPORT_FILENAMES` and
+`database.RECONCILIATION_QUERY_NUMBERS` both extended to cover it.
+Alternatives considered: leaving query 7 as the only reconciliation query
+and treating the in-memory assertion in `src/correlations.py` as
+sufficient on its own.
+Reason: section 8 says "at least these" queries, so an eighth is within
+scope, and a SQL-level proof is what a reviewer reading `sql/analysis_queries.sql`
+actually sees, versus having to trust a Python assertion they can't see run.
+Owner consulted: no -- this was explicitly flagged as Phase 4 follow-up
+work in the Phase 3 entry, not new scope.
+
+**2026-09-18 — Phase 4 (rolling correlations) signed off as complete**
+Alternatives considered: n/a -- phase closeout, not a build decision.
+Reason: `python -m src.run_all` runs Phase 4 end to end against real data
+-- 2,078 non-NaN values per pair at the 90-day window, the pandas/hand-
+written agreement assertion passes for all three pairs, and queries 1, 2,
+5, and 8 return non-vacuous results (18, 20, 39, and 0 rows respectively).
+`pytest tests/` passes (27/27, including the new
+`tests/test_core_math.py` and `tests/test_correlations.py`). Figures 1, 2,
+and 4 render to `outputs/figures/`, checked visually for greyscale
+legibility (each of the three pair lines uses both a distinct color and a
+distinct linestyle; every heatmap cell prints its numeric value).
+Owner consulted: no -- verification performed by inspecting the pipeline
+run's log output and the rendered figures directly.
+
 **Concepts the owner is currently learning, noted here rather than in code comments:**
 - The manifest's `has_fetched_today` check is a simple date-string
   comparison, not a general-purpose cache invalidation system — worth being
@@ -232,3 +332,16 @@ not a new data problem.
   FOLLOWING AND 20 FOLLOWING` gives a genuinely forward-looking window and
   why `forward_days_available = 20` is needed to drop the last 20 days of
   the series, which don't have a full 20-day-ahead window to sum.
+- Pearson vs. Spearman correlation (`src/core_math.py`,
+  `src/correlations.py`): Pearson measures linear relationship between the
+  raw values; Spearman measures monotonic relationship by first converting
+  each value to its rank within the window, then running the exact same
+  Pearson formula on the ranks. `tests/test_correlations.py`'s `y = x**3`
+  case is the clearest way to see the two methods actually disagree: worth
+  being able to explain why Spearman is 1.0 there but Pearson isn't.
+- Why a rolling calculation can't rank "the whole series and then slice a
+  window" as a shortcut for ranking each window separately
+  (`rolling_spearman()`'s docstring works through this): a value's rank
+  depends on what else is in the window it's being compared against, so
+  the ranking step has to be redone for every window, not done once up
+  front.

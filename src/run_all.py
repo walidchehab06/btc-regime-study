@@ -7,9 +7,10 @@ mentions as an option. See docs/decisions-log.md for the reasoning. Each
 phase of the pipeline (BUILD-SPEC section 12) adds its step here, in order.
 """
 
+import sqlite3
 import sys
 
-from src import build_panel, database, fetch_fred, fetch_market, fetch_sentiment
+from src import build_panel, charts, config, correlations, database, fetch_fred, fetch_market, fetch_sentiment
 
 
 def run_phase_1_data_acquisition():
@@ -71,6 +72,54 @@ def run_phase_3_sqlite():
     database.main()
 
 
+def run_phase_4_correlations():
+    """
+    Run the rolling-correlation step for Phase 4.
+
+    Why it exists: groups correlations.main() under the name BUILD-SPEC
+    section 12 calls "Phase 4 - Correlations". Runs after Phase 3 has
+    created the schema and loaded the base tables, since correlations.py
+    opens its own connection to the already-built database rather than
+    rebuilding it. Also generates figures 1, 2, and 4 once
+    rolling_correlations is loaded, per section 12's Phase 4 acceptance
+    criterion.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
+    print("=== Phase 4: Correlations ===")
+    correlations.main()
+    charts.main()
+
+
+def run_analysis_queries():
+    """
+    Run and export every analysis query, once every table the queries
+    depend on has been loaded.
+
+    Why it exists: src/database.py's query-export step was pulled out of
+    Phase 3 so it runs after Phase 4 (and, later, Phase 5) have populated
+    rolling_correlations and regimes/regime_periods -- otherwise queries
+    1, 2, 4, 5, 6, and 8 would run vacuously against empty tables. See
+    docs/decisions-log.md.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
+    print("=== Exporting analysis query results ===")
+    conn = sqlite3.connect(config.DB_PATH)
+    try:
+        database.run_analysis_queries_and_export(conn)
+    finally:
+        conn.close()
+
+
 def main():
     """
     Run the full pipeline, phase by phase.
@@ -87,6 +136,8 @@ def main():
     run_phase_1_data_acquisition()
     run_phase_2_panel_construction()
     run_phase_3_sqlite()
+    run_phase_4_correlations()
+    run_analysis_queries()
 
 
 if __name__ == "__main__":
