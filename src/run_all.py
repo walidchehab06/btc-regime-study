@@ -19,6 +19,7 @@ from src import (
     fetch_fred,
     fetch_market,
     fetch_sentiment,
+    model,
     regimes,
     sentiment,
     validation,
@@ -166,6 +167,28 @@ def run_phase_7_sentiment():
     sentiment.main()
 
 
+def run_phase_8_model():
+    """
+    Run the ML classifier step for Phase 8.
+
+    Why it exists: groups model.main() under the name BUILD-SPEC section
+    12 calls "Phase 8 - Model". Runs after Phase 5 has loaded regimes and
+    Phase 4 has loaded rolling_correlations, both of which
+    src/model.py's feature matrix reads, and before run_charts(), since
+    model.main() renders figures 8 and 9 itself (see
+    src/charts.py:main()'s docstring) rather than waiting for
+    run_charts() to do it.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
+    print("=== Phase 8: Model ===")
+    model.main()
+
+
 def run_charts():
     """
     Generate every figure, once every table the figures depend on has
@@ -178,7 +201,8 @@ def run_charts():
     outputs/tables/sentiment_forward_returns_daily.csv from Phase 7, so
     chart generation moved here from inside run_phase_4_correlations() --
     the same reasoning as run_analysis_queries() moving out of Phase 3.
-    See docs/decisions-log.md.
+    Figures 8 and 9 are not generated here -- see
+    run_phase_8_model()'s docstring. See docs/decisions-log.md.
 
     Parameters:
         None.
@@ -235,6 +259,7 @@ def main():
     run_phase_5_regimes()
     run_phase_6_validation()
     run_phase_7_sentiment()
+    run_phase_8_model()
     run_charts()
     run_analysis_queries()
 

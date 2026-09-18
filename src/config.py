@@ -297,3 +297,71 @@ SENTIMENT_BUCKET_MODERATE = "MODERATE"
 SENTIMENT_FORWARD_RETURNS_DAILY_TABLE_PATH = OUTPUTS_TABLES_DIR / "sentiment_forward_returns_daily.csv"
 SENTIMENT_FORWARD_RETURNS_SUMMARY_TABLE_PATH = OUTPUTS_TABLES_DIR / "sentiment_forward_returns_summary.csv"
 SENTIMENT_TRANSITION_PROXIMITY_TABLE_PATH = OUTPUTS_TABLES_DIR / "sentiment_transition_proximity.csv"
+
+# --- ML classifier (BUILD-SPEC section 6.7, section 12 Phase 8) ---
+# Predict the regime label this many trading days ahead of the prediction
+# date -- the only target this phase is allowed to build, per section 6.7.
+ML_TARGET_HORIZON_DAYS = 5
+
+# Correlation features use the same method (Pearson) the regime rule
+# itself is classified from (src/regimes.py), not Spearman -- a feature
+# should describe the same thing the target was built out of.
+ML_CORRELATION_METHOD = "pearson"
+
+# All window lengths below are trailing (backward-looking) only, per
+# section 6.7's no-look-ahead, no-centered-window requirement -- every one
+# of them is implemented as a rolling/.diff() calculation over the past N
+# trading days ending on the prediction date, never a centered window.
+ML_VOLATILITY_WINDOW_DAYS = 20
+ML_MOMENTUM_WINDOW_DAYS = 20
+ML_DXY_CHANGE_WINDOW_DAYS = 20
+ML_REAL_YIELD_CHANGE_WINDOW_DAYS = 20
+ML_SENTIMENT_CHANGE_WINDOW_DAYS = 14
+
+# The DXY feature reads the same instrument (yfinance DX-Y.NYB) already
+# used for the BTC_DXY correlation pair in CORRELATION_PAIRS above, rather
+# than the FRED broad-dollar series (DTWEXBGS) -- one DXY reading used
+# consistently by both the correlation and the change feature. See
+# docs/decisions-log.md.
+ML_DXY_FEATURE_COLUMN = "close_DX-Y.NYB"
+# The 10-year real yield, per section 6.7's feature list.
+ML_REAL_YIELD_COLUMN = "value_DFII10"
+
+# Fixed class order used everywhere a model, table, or figure needs one:
+# training, confusion matrices, and class-support all iterate labels in
+# this order so every output lines up the same way. Matches
+# charts.REGIME_LEGEND_ORDER.
+ML_REGIME_LABEL_ORDER = [
+    REGIME_LABEL_RISK_ASSET,
+    REGIME_LABEL_HARD_ASSET,
+    REGIME_LABEL_IDIOSYNCRATIC,
+    REGIME_LABEL_MIXED,
+]
+
+# Walk-forward validation (section 6.7: TimeSeriesSplit or an explicit
+# expanding window, never a random shuffled split -- see
+# docs/decisions-log.md for why shuffling would be invalid here).
+ML_TIMESERIES_N_SPLITS = 5
+# Gap, in trading days, left empty between each fold's training data and
+# its test data. Set equal to ML_TARGET_HORIZON_DAYS so that no training
+# row's target (which is dated up to ML_TARGET_HORIZON_DAYS ahead of that
+# row's own features) reaches forward into the following test fold's
+# dates -- without this gap, the last few rows of every training fold
+# would carry a target label dated inside the test fold.
+ML_TIMESERIES_GAP_DAYS = ML_TARGET_HORIZON_DAYS
+
+# Decision tree depth, fixed within section 6.7's allowed 3-5 range and
+# picked before looking at any test-set result -- searching this value
+# against test performance would itself be the kind of tuning-to-beat-
+# baseline section 6.7 explicitly forbids. See docs/decisions-log.md.
+ML_TREE_MAX_DEPTH = 4
+ML_LOGISTIC_MAX_ITER = 1000
+# Fixes scikit-learn's internal tie-breaking (e.g. which of two equally
+# good tree splits is chosen) so the pipeline is reproducible run to run.
+ML_RANDOM_STATE = 42
+
+ML_FEATURES_TABLE_PATH = OUTPUTS_TABLES_DIR / "ml_features_daily.csv"
+ML_MODEL_COMPARISON_TABLE_PATH = OUTPUTS_TABLES_DIR / "ml_model_comparison.csv"
+ML_PER_FOLD_METRICS_TABLE_PATH = OUTPUTS_TABLES_DIR / "ml_per_fold_metrics.csv"
+ML_CONFUSION_MATRICES_TABLE_PATH = OUTPUTS_TABLES_DIR / "ml_confusion_matrices.csv"
+ML_CLASS_SUPPORT_TABLE_PATH = OUTPUTS_TABLES_DIR / "ml_class_support.csv"

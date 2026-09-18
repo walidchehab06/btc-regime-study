@@ -27,6 +27,38 @@ at the start of every session before writing any code.
 - Tests: pytest tests/
 
 ## Current phase
+Phase 8 — complete. `src/model.py` built: the section 6.7 classifier
+predicting the regime label 5 trading days ahead (`config.ML_TARGET_HORIZON_DAYS`),
+multinomial logistic regression and a decision tree capped at
+`config.ML_TREE_MAX_DEPTH` (4, fixed before evaluation, not tuned — see
+docs/decisions-log.md), features built only from trailing/current-date
+information (`compute_technical_features`, `build_feature_matrix`): 30-
+and 90-day Pearson correlations with Nasdaq/gold/DXY, 20-day realized BTC
+volatility, 20-day BTC momentum, 20-day DXY and real-yield change, F&G
+level and its 14-day change, and the current regime label one-hot
+encoded. Validated with `TimeSeriesSplit(n_splits=5, gap=5)`
+(`run_walk_forward_evaluation`) — never shuffled, see docs/decisions-log.md
+for why. Both required baselines (persistence, majority-class, the
+latter recomputed per fold from that fold's own training labels) run
+through the identical walk-forward loop alongside both models. Accuracy,
+balanced accuracy, macro F1, confusion matrix, and class support reported
+for all four methods (`build_model_comparison_table`,
+`build_confusion_matrices`, `build_class_support_table`). Result matches
+section 6.7's expected headline: persistence (accuracy 0.962) beats both
+the decision tree (0.841) and logistic regression (0.676); no parameter
+was tuned after seeing this, and docs/findings.md states it plainly as
+the headline, per section 6.7's honesty requirement.
+`src/charts.py` gained figure 8 (confusion matrices, all four methods)
+and figure 9 (the depth-4 tree, fit on the full history for illustration
+only, never scored — see docs/decisions-log.md), both rendered from
+`src/model.py:main()` directly rather than `charts.main()`, same
+reasoning as Phase 5's before/after diagnostic chart. `src/run_all.py`
+now runs Phase 8 after Phase 7 and before `run_charts()`. New
+docs/ml-caveats.md covers overlapping-window leakage risk, why accuracy
+is weak under this target's class imbalance, and why the result is
+exploratory only. `pytest tests/` passes (57/57, including the new
+`tests/test_model.py`).
+
 Phase 7 — complete. `src/sentiment.py` built: sentiment bucketing
 (`assign_sentiment_bucket`, `EXTREME_FEAR` <=20 / `EXTREME_GREED` >=80 /
 `MODERATE`, computed from `fng_value` directly — deliberately not the
@@ -49,6 +81,6 @@ significance test is run anywhere in this phase, per section 6.6's
 instruction. `pytest tests/` passes (51/51, including the new
 `tests/test_sentiment.py`).
 
-Phase 6 (validation, `src/validation.py`, figure 10) completed earlier and
-is not re-summarized here — see docs/decisions-log.md and
-docs/validation.md. Phase 8 (the ML component) not started.
+Phases 1-6 (through validation, `src/validation.py`, figure 10) completed
+earlier and are not re-summarized here — see docs/decisions-log.md and
+docs/validation.md.

@@ -533,6 +533,111 @@ before placing text, so every label sits just above its own box regardless
 of that bucket's outliers.
 Owner consulted: no -- caught and fixed while reviewing the rendered figure.
 
+**2026-09-18 — Phase 8's `dxy_change_20` feature reads the market ticker (`DX-Y.NYB`), not the FRED broad-dollar series (`DTWEXBGS`)**
+Alternatives considered: `DTWEXBGS`, the FRED nominal broad US Dollar
+Index already pulled in Phase 1 and described in `config.py` as the
+"dollar-strength driver."
+Reason: the `BTC_DXY` correlation pair the model also uses as a feature
+(`corr_30_BTC_DXY`, `corr_90_BTC_DXY`) is built from `DX-Y.NYB`'s log
+return. Reading the DXY *change* feature from the same instrument keeps
+"DXY" meaning one consistent thing across the feature set, rather than the
+correlation feature and the change feature quietly describing two
+different dollar indices with different construction methodologies.
+Owner consulted: no -- implementation detail, section 6.7 names "DXY"
+without specifying an instrument.
+
+**2026-09-18 — Decision tree depth fixed at 4, not searched within the allowed 3-5 range**
+Alternatives considered: trying all of 3, 4, and 5 and reporting whichever
+scored best on the walk-forward folds.
+Reason: section 6.7 explicitly forbids tuning parameters to try to beat
+the persistence baseline. Picking a depth *after* seeing which one scores
+best on held-out folds is tuning, even if the search space is small and
+the metric isn't accuracy specifically -- it's still using test-fold
+performance to choose a hyperparameter. 4 is the middle of the allowed
+range and still small enough for figure 9 to be readable.
+Owner consulted: no -- direct consequence of section 6.7's own honesty
+requirement.
+
+**2026-09-18 — `TimeSeriesSplit(gap=config.ML_TARGET_HORIZON_DAYS)`**
+Alternatives considered: `TimeSeriesSplit` with the default `gap=0`.
+Reason: the target at any row is dated `ML_TARGET_HORIZON_DAYS` trading
+days ahead of that row's features. With `gap=0`, the last few rows of
+every training fold would carry a target label dated inside the
+following test fold's date range -- not feature leakage, but the model
+would have been trained on a label that names a day inside the period
+it's then evaluated on. Setting the gap equal to the horizon removes that
+overlap entirely. See `docs/ml-caveats.md` for why this does not make
+the remaining rows independent of each other -- it only fixes this one
+specific overlap.
+Owner consulted: yes -- explained in the phase-8 planning conversation
+before building, at the owner's explicit request to explain why a
+shuffled split would be invalid here.
+
+**2026-09-18 — Model comparison metrics computed on pooled out-of-fold predictions, not averaged per-fold metrics**
+Alternatives considered: computing accuracy/balanced accuracy/macro F1
+per fold and averaging the five fold-level numbers.
+Reason: `TimeSeriesSplit`'s expanding-window folds have very different
+test-set sizes (each fold's test set is roughly the same length, but the
+early folds' training sets are much shorter), so a plain average across
+folds would silently weight a fold with 40 test days the same as one with
+400. Pooling every fold's out-of-fold predictions before scoring weights
+every test day equally instead. The per-fold breakdown is not thrown
+away -- it's still written to `outputs/tables/ml_per_fold_metrics.csv` so
+fold-to-fold stability (or the lack of it) stays visible.
+Owner consulted: no -- implementation detail.
+
+**2026-09-18 — Figure 9's decision tree is fit on the full study history, illustratively, and is never scored**
+Alternatives considered: plotting one fold's tree from the walk-forward
+loop, e.g. the last fold's.
+Reason: any single fold's tree was trained on less data than is
+available and would misrepresent what the study's own history actually
+shows; using the full-history tree for the figure, while being explicit
+in the caption and in `src/model.py` that it is never the tree whose
+predictions appear in `ml_model_comparison.csv`, keeps the walk-forward
+evaluation (the only place accuracy claims are allowed to come from)
+completely separate from the illustration.
+Owner consulted: no -- implementation detail, doesn't affect any reported
+metric.
+
+**2026-09-18 — Figures 8 and 9 rendered directly from `src/model.py:main()`, not from `charts.py:main()`**
+Alternatives considered: writing the confusion-matrix arrays and the
+illustrative tree's structure to disk and having `charts.py:main()` read
+them back in, the way it reads `sensitivity_grid.csv` or
+`validation_comparison.csv` for other figures.
+Reason: same reasoning `src/regimes.py` already uses for the before/after
+persistence-filter diagnostic chart -- the fitted `DecisionTreeClassifier`
+object figure 9 needs isn't naturally something to reload from a CSV
+without re-fitting it, and re-fitting inside `charts.py` would put
+model-fitting logic in the one module that's supposed to only plot.
+`build_confusion_matrices()`'s long-format CSV *does* persist and could
+technically be pivoted back in `charts.py`, but keeping both Phase 8
+figures generated from the same place (`model.py:main()`) was judged more
+consistent than splitting them.
+Owner consulted: no -- implementation detail.
+
+**2026-09-18 — Phase 8 (ML classifier) complete: `src/model.py`, figures 8-9, `docs/ml-caveats.md`, `docs/findings.md`**
+Alternatives considered: n/a -- this is a phase closeout, not a build
+decision.
+Reason: `python -m src.run_all` runs Phase 8 end to end against real data,
+between Phase 7 and figure generation -- 2,045 usable rows after warm-up
+and end-of-series drops, walk-forward evaluated across 5
+`TimeSeriesSplit(gap=5)` folds (1,700 pooled out-of-fold predictions,
+2019-10-31 through 2026-09-10). Result matches section 6.7's expected
+headline exactly: the persistence baseline (accuracy 0.962, balanced
+accuracy 0.944, macro F1 0.949) beats both the decision tree (0.841,
+0.733, 0.722) and logistic regression (0.676, 0.563, 0.559), and neither
+model's hyperparameters were adjusted after seeing this. `docs/findings.md`
+states the comparison as the headline, per section 6.7's honesty
+requirement, and walks through the illustrative full-history tree
+(figure 9) to explain *why*: its first split is the current-regime
+feature, the same information the persistence baseline already uses
+directly. `pytest tests/` passes (57/57, including the new
+`tests/test_model.py`).
+Owner consulted: yes -- the full Phase 8 plan (task, features, models,
+validation scheme, both baselines, metrics, the honesty requirement) was
+confirmed via ExitPlanMode before implementation, per the owner's
+explicit request to plan before building.
+
 **Concepts the owner is currently learning, noted here rather than in code comments:**
 - The manifest's `has_fetched_today` check is a simple date-string
   comparison, not a general-purpose cache invalidation system — worth being
@@ -619,3 +724,15 @@ Owner consulted: no -- caught and fixed while reviewing the rendered figure.
   would treat them as if they were, which is why this project reports n,
   mean, median, and standard deviation only, and no significance test, for
   every sentiment-bucket statistic.
+- Why a random shuffled train/test split is invalid for the Phase 8
+  classifier (`src/model.py`, section 6.7): regime labels are smoothed by
+  a 90-day rolling window and a 15-day minimum-persistence filter, so
+  they're highly autocorrelated -- the label on day *t* is very likely
+  the same as the label a few days before or after it. A shuffled split
+  would put some post-test-date rows into training, letting the model
+  train on a label from just after the point it's asked to predict, which
+  is interpolation dressed up as forecasting: the reported accuracy would
+  be inflated and meaningless. `TimeSeriesSplit(gap=...)` keeps every
+  test fold strictly later in calendar time than everything the model
+  saw in training, which is the only setup that mimics how the model
+  could ever actually be used going forward from a real prediction date.

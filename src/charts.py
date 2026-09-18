@@ -18,6 +18,7 @@ import pandas as pd
 import sqlite3
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import Patch
+from sklearn.tree import plot_tree
 
 from src import config
 
@@ -830,10 +831,135 @@ def plot_forward_return_distributions_by_bucket(forward_returns_long, filename="
     return save_figure(fig, filename)
 
 
+ML_METHOD_ORDER = ["persistence", "majority_class", "logistic_regression", "decision_tree"]
+ML_METHOD_DISPLAY_LABELS = {
+    "persistence": "Persistence baseline",
+    "majority_class": "Majority-class baseline",
+    "logistic_regression": "Logistic regression",
+    "decision_tree": "Decision tree",
+}
+
+
+def plot_confusion_matrices(confusion_matrices, labels, filename="fig08_confusion_matrices.png"):
+    """
+    Figure 8: confusion matrices for both baselines and both models, one
+    panel each, from BUILD-SPEC section 12 (Phase 8).
+
+    Why it exists: BUILD-SPEC section 9, figure 8 -- puts the model's
+    confusion matrix next to the persistence baseline's, plus the
+    majority-class baseline and the decision tree, so all four methods
+    are compared on equal footing. Counts are printed in every cell
+    (section 9's greyscale-legibility rule) rather than relying on a
+    shared color scale, since the four methods' matrices are not on
+    comparable scales (a near-diagonal persistence matrix vs. a
+    majority-class matrix concentrated in one column).
+
+    Parameters:
+        confusion_matrices: dict mapping method name (one of
+            src/model.py's METHOD_ORDER) -> numpy.ndarray confusion
+            matrix (len(labels) x len(labels), rows = true label,
+            columns = predicted label), from
+            src/model.py:build_confusion_matrices().
+        labels: list of str, the fixed class order
+            (config.ML_REGIME_LABEL_ORDER).
+        filename: str, output filename under outputs/figures/.
+
+    Returns:
+        pathlib.Path, the saved figure's path.
+    """
+    display_labels = [REGIME_DISPLAY_LABELS.get(label, label) for label in labels]
+
+    fig, axes = plt.subplots(2, 2, figsize=(10, 9.5))
+    axes = axes.flatten()
+
+    for ax, method in zip(axes, ML_METHOD_ORDER):
+        matrix = confusion_matrices[method]
+        ax.imshow(matrix, cmap=SEQUENTIAL_BLUE_CMAP)
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(display_labels, rotation=45, ha="right", fontsize=7)
+        ax.set_yticks(range(len(labels)))
+        ax.set_yticklabels(display_labels, fontsize=7)
+        ax.set_xlabel("Predicted", fontsize=8)
+        ax.set_ylabel("Actual", fontsize=8)
+        ax.set_title(ML_METHOD_DISPLAY_LABELS[method], fontsize=9)
+
+        color_midpoint = matrix.max() * 0.6 if matrix.max() > 0 else 1
+        for row in range(len(labels)):
+            for col in range(len(labels)):
+                count = int(matrix[row, col])
+                text_color = "white" if count >= color_midpoint else TEXT_PRIMARY
+                ax.text(col, row, str(count), ha="center", va="center", fontsize=8, color=text_color)
+
+    fig.suptitle("Confusion matrices: regime label 5 trading days ahead (pooled out-of-fold predictions)")
+    fig.subplots_adjust(hspace=0.65, wspace=0.55)
+
+    add_caption(
+        fig,
+        "Source: outputs/tables/ml_confusion_matrices.csv, every method's predictions pooled "
+        f"across all {config.ML_TIMESERIES_N_SPLITS} TimeSeriesSplit walk-forward folds "
+        f"(gap={config.ML_TIMESERIES_GAP_DAYS} trading days). Both baselines evaluated the same "
+        "walk-forward way as both models -- see docs/ml-caveats.md.",
+    )
+
+    return save_figure(fig, filename)
+
+
+def plot_decision_tree(tree_model, feature_names, class_names, filename="fig09_decision_tree.png"):
+    """
+    Figure 9: the depth-capped decision tree, fit on the full study
+    history for illustration only.
+
+    Why it exists: BUILD-SPEC section 9, figure 9. Left unfilled (no
+    per-node fill color) rather than using scikit-learn's automatic
+    class-color fill, so this figure doesn't need its own palette on top
+    of the ones already defined in this module and stays legible in
+    greyscale by construction, per section 9's rules.
+
+    Parameters:
+        tree_model: sklearn.tree.DecisionTreeClassifier, already fit --
+            src/model.py:main()'s illustrative full-history tree, not one
+            of the walk-forward folds' trees.
+        feature_names: list of str, column names of the DataFrame the
+            tree was fit on, in the same order.
+        class_names: list of str, the fixed class order
+            (config.ML_REGIME_LABEL_ORDER).
+        filename: str, output filename under outputs/figures/.
+
+    Returns:
+        pathlib.Path, the saved figure's path.
+    """
+    display_class_names = [REGIME_DISPLAY_LABELS.get(name, name) for name in class_names]
+
+    fig, ax = plt.subplots(figsize=(16, 9))
+    plot_tree(
+        tree_model,
+        feature_names=feature_names,
+        class_names=display_class_names,
+        filled=False,
+        impurity=False,
+        fontsize=7,
+        ax=ax,
+    )
+    ax.set_title(
+        f"Decision tree (max depth {config.ML_TREE_MAX_DEPTH}), fit on the full study history for illustration"
+    )
+
+    add_caption(
+        fig,
+        "Source: outputs/tables/ml_features_daily.csv, full study period. Illustrative only -- fit "
+        "on all available data, not one of the walk-forward folds scored in "
+        "outputs/tables/ml_model_comparison.csv. See docs/decisions-log.md.",
+    )
+
+    return save_figure(fig, filename)
+
+
 def main():
     """
     Generate figures 1, 2, 3, 4, 5, 6, 7, and 10 from the already-built
-    database and panel.
+    database and panel. Figures 8 and 9 are rendered separately, directly
+    from src/model.py:main() -- see plot_confusion_matrices() and
+    plot_decision_tree()'s docstrings for why.
 
     Why it exists: this is the entry point src/run_all.py calls once,
     after Phase 4 (correlations), Phase 5 (regimes), Phase 6 (validation),
