@@ -63,8 +63,95 @@ section 6.1 assigns to the Nasdaq-trading-day inner join — nothing to fix
 in Phase 1, just a concrete number to point to when explaining why the
 calendar alignment step exists.
 
+**2026-09-18 — Wide daily panel format for `panel_daily.parquet`**
+Alternatives considered: long format matching section 8's SQL schema
+(`prices_daily(date, ticker, close, volume)` etc.) directly.
+Reason: Phase 4's rolling-correlation code wants columns to compute
+against directly (`close_BTC-USD`, `log_return_^IXIC`, ...); a wide panel
+is the natural shape for that, and Phase 3's `database.py` can melt it
+into the long SQL tables when it's built. Not fixed by section 7, which
+names the file but not its shape.
+Owner consulted: no.
+
+**2026-09-18 — `panel_daily_alt_weekend.parquet` as the robustness-check filename**
+Alternatives considered: n/a — section 7 doesn't name this file at all,
+only requires the alternative panel to exist (section 6.1).
+Reason: needed a name; chose one that says what differs (weekend handling)
+rather than a generic `_v2` or `_alt` suffix.
+Owner consulted: no.
+
+**2026-09-18 — Sentiment gap at 2018-04-16 left as NaN, not forward-filled**
+Alternatives considered: forward-filling like M2SL/WALCL, with a matching
+is_forward_filled flag.
+Reason: sentiment isn't in section 5.2's forward-fill list; extending that
+list by assumption for a single missing day wasn't worth it. No value was
+published for that day, so none is invented.
+Owner consulted: yes, asked directly — owner chose leave-as-NaN.
+
+**2026-09-18 — BTC-USD same-day publication-lag gap: refetched, and the
+integrity assertion redesigned around real data instead of a guess**
+What happened: the first Phase 2 build run raised the "zero NaN in
+close_BTC-USD" assertion — 2026-09-17 was missing from that morning's
+cached pull. A fresh yfinance query a few hours later returned it cleanly,
+confirming this was Yahoo's BTC-USD feed not having finalized the previous
+day's bar yet at pull time, not a permanent gap. The stale cache entry and
+CSV were removed and `fetch_market.py` re-run for that one ticker, which
+pulled the complete data.
+Alternatives considered: leaving the NaN in place and accepting a 2-day
+gap in Bitcoin's log return; loosening the assertion instead of refetching.
+Reason to refetch rather than loosen: the assertion doing exactly its job
+(catching a genuine incomplete pull) is the point of writing it; getting
+the real complete data is strictly better than tolerating a hole in it.
+Reason to also loosen the assertion going forward: this exposed that the
+original zero-tolerance design was based on checking only 6 of 8 tickers
+before writing it (see the 2026-09-18 Phase 2 plan) — Bitcoin, trading
+right up to the pull time, is uniquely exposed to this lag in a way the
+exchange-hours tickers aren't. The assertion now tolerates a NaN only
+within the trailing 30 days, matching the tolerance already used for daily
+FRED series, and fails loudly on anything older.
+Owner consulted: no — investigated and fixed within the session; reported
+here rather than left silent.
+
+**2026-09-18 — Daily FRED-series NaN tolerance changed from a trailing-date
+window to a NaN-fraction threshold**
+What happened: `DFII10`, `DTWEXBGS`, and `T10Y2Y` all have NaNs scattered
+across the full study period, not just at the trailing edge — every one
+of them lands exactly on Columbus Day or Veterans Day (observed) in every
+year from 2018 to 2025, plus a few additional bond-market-only closures
+in `DTWEXBGS`. These are Treasury/bond-market holidays that aren't Nasdaq
+holidays, so FRED has no reading while Nasdaq was open.
+Alternatives considered: hand-maintaining a bond-market holiday calendar
+to assert against exactly; keeping the trailing-window-only assertion and
+accepting it would always fail for these three series.
+Reason: modeling every regional/market holiday calendar precisely is more
+machinery than this project needs (see CLAUDE.md's "no abstractions beyond
+what's needed"). `FRED_DAILY_MAX_NAN_FRACTION = 0.05` in `src/config.py`
+catches a genuinely broken pull (which would leave far more than 5% NaN)
+without failing on legitimate, recurring holiday gaps (actual rate: 0.7%
+to 1.3% of rows per series). Documented in docs/methodology.md.
+Owner consulted: no — investigated and fixed within the session; reported
+here rather than left silent.
+
+**2026-09-18 — Phase 2 (panel construction) signed off as complete**
+Alternatives considered: n/a — this is a phase closeout, not a build decision.
+Reason: owner independently verified the built panel's row counts, date
+range, and NaN pattern against the printed summary, and walked through
+`src/build_panel.py` line by line (calendar-alignment reindex, the
+reindex-then-diff vs. diff-then-reindex robustness check, and the
+forward-fill flag) to confirm understanding before signing off. All 9
+tests pass (`pytest tests/`); `python -m src.run_all` runs both phases
+clean end to end.
+Owner consulted: yes — verification and walkthrough performed directly
+with the owner.
+
 **Concepts the owner is currently learning, noted here rather than in code comments:**
 - The manifest's `has_fetched_today` check is a simple date-string
   comparison, not a general-purpose cache invalidation system — worth being
   able to explain the difference in an interview if asked "how does the
   caching work."
+- `reindex-then-diff` vs. `diff-then-reindex` in `build_panel.py` is the
+  entire mechanism behind the section 6.1 robustness check: same two pandas
+  operations, different order, different answer. Worth being able to trace
+  through by hand on a small example (the tests in
+  `tests/test_build_panel.py` are exactly that example) rather than just
+  citing "calendar alignment" as a phrase.

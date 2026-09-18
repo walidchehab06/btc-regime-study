@@ -57,8 +57,8 @@
     "first_date": "2018-02-01",
     "last_date": "2026-09-18",
     "library_version": "1.7.0",
-    "retrieved_at_utc": "2026-09-18T07:38:31.549985+00:00",
-    "row_count": 3151,
+    "retrieved_at_utc": "2026-09-18T07:53:50.405754+00:00",
+    "row_count": 3152,
     "series": "BTC-USD",
     "source": "yfinance"
   },

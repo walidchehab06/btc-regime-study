@@ -9,7 +9,7 @@ phase of the pipeline (BUILD-SPEC section 12) adds its step here, in order.
 
 import sys
 
-from src import fetch_fred, fetch_market, fetch_sentiment
+from src import build_panel, fetch_fred, fetch_market, fetch_sentiment
 
 
 def run_phase_1_data_acquisition():
@@ -37,6 +37,23 @@ def run_phase_1_data_acquisition():
     fetch_sentiment.fetch_and_cache_sentiment()
 
 
+def run_phase_2_panel_construction():
+    """
+    Run the panel-construction step for Phase 2.
+
+    Why it exists: groups build_panel.main() under the name BUILD-SPEC
+    section 12 calls "Phase 2 - Panel construction".
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
+    print("=== Phase 2: Panel construction ===")
+    build_panel.main()
+
+
 def main():
     """
     Run the full pipeline, phase by phase.
@@ -51,6 +68,7 @@ def main():
         None.
     """
     run_phase_1_data_acquisition()
+    run_phase_2_panel_construction()
 
 
 if __name__ == "__main__":

@@ -51,3 +51,26 @@ SOURCE_SENTIMENT = "alternative_me"
 # --- Caching and provenance (BUILD-SPEC section 5.4) ---
 RAW_DATA_DIR = Path("data/raw")
 MANIFEST_PATH = RAW_DATA_DIR / "_manifest.json"
+
+# --- Panel construction (BUILD-SPEC section 6.1, 6.2, 5.2) ---
+PROCESSED_DATA_DIR = Path("data/processed")
+PANEL_PATH = PROCESSED_DATA_DIR / "panel_daily.parquet"
+# The section 6.1 robustness-check panel: Bitcoin's weekend returns dropped
+# instead of absorbed into Monday's return. Every other column is identical
+# to panel_daily.parquet.
+PANEL_ALT_WEEKEND_PATH = PROCESSED_DATA_DIR / "panel_daily_alt_weekend.parquet"
+
+# The ticker whose trading days define the panel's date index (section 6.1).
+CALENDAR_ANCHOR_TICKER = "^IXIC"
+
+# FRED series that are monthly/weekly and therefore forward-filled into the
+# daily panel, per section 5.2. Every other FRED series is left as NaN on
+# days it hasn't been published yet, rather than filled.
+FRED_FORWARD_FILL_SERIES = {"M2SL", "WALCL"}
+
+# Daily FRED series (Treasury-derived) are NaN on bond-market holidays that
+# aren't Nasdaq holidays -- Columbus Day and Veterans Day observed every
+# year in the data, plus a handful of bond-market-only early closes. This
+# caps how much of a daily FRED column can be NaN before build_panel.py
+# treats it as a real gap instead of an expected holiday-calendar mismatch.
+FRED_DAILY_MAX_NAN_FRACTION = 0.05

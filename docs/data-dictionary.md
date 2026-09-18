@@ -57,3 +57,25 @@ construction (the weighting of those inputs) is proprietary and not
 published, so it cannot be independently verified or reproduced from raw
 data the way the price-based series above can. Treat it as a documented
 limitation, not a hidden one, wherever it is used in the analysis.
+
+## Processed panel (`data/processed/panel_daily.parquet` and
+`panel_daily_alt_weekend.parquet`)
+
+One row per Nasdaq trading date (BUILD-SPEC section 6.1). The two files
+are identical except for `log_return_BTC-USD` — see docs/methodology.md
+for what differs and why.
+
+| Column pattern | Meaning | Forward-filled? |
+|---|---|---|
+| `close_<ticker>` | Adjusted close, aligned to the Nasdaq calendar | No — every market ticker covers 100% of Nasdaq trading days, so this is never NaN |
+| `volume_<ticker>` | Daily volume, same alignment | No, same as close |
+| `log_return_<ticker>` | `ln(close_t / close_{t-1})`, BUILD-SPEC section 6.2 | No; first row of the panel is NaN (no prior day to compare against) |
+| `value_<series_id>` | FRED series value, aligned to the Nasdaq calendar | Only `M2SL` and `WALCL`; the three daily series (`DFII10`, `DTWEXBGS`, `T10Y2Y`) are NaN on bond-market holidays that aren't Nasdaq holidays (Columbus Day, Veterans Day) |
+| `is_forward_filled_<series_id>` | True on a date whose value was carried forward rather than reported that day | Present for all 5 FRED series; always False for the three daily ones |
+| `fng_value` / `fng_label` | Fear & Greed score / label, aligned to the Nasdaq calendar | No; NaN on the single known gap, 2018-04-16 |
+
+`close_<ticker>` and `volume_<ticker>` columns are asserted to have zero
+NaN in `src/build_panel.py`. That assertion caught a real, same-day
+publication-lag gap in Bitcoin's data during Phase 2 build (see
+docs/decisions-log.md) — worth knowing the assertion exists for a reason,
+not as boilerplate.

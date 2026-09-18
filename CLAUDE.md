@@ -27,4 +27,4 @@ at the start of every session before writing any code.
 - Tests: pytest tests/
 
 ## Current phase
-Phase 2 — not started. Update this line at the end of every session.
+Phase 3 — not started. Update this line at the end of every session.
