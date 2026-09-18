@@ -1,71 +1,27 @@
-# ML caveats (BUILD-SPEC section 6.7)
+# ML caveats
 
-Three things worth understanding clearly before reading any number out of
-`outputs/tables/ml_model_comparison.csv` or `docs/findings.md`'s Phase 8
-section.
+Read these three points before you read any number in `outputs/tables/ml_model_comparison.csv` or in finding 5 of `docs/findings.md`.
 
-## 1. Overlapping windows mean the folds aren't independent
+## 1. Overlapping windows mean the folds are not independent
 
-Every feature in `src/model.py:CONTINUOUS_FEATURE_COLUMNS` is a rolling or
-`.diff()` calculation over a trailing window (20 or 90 trading days). The
-feature row for one date and the feature row for the next date share
-almost all of their underlying days -- `realized_vol_20` on Tuesday and
-`realized_vol_20` on Wednesday are computed from 19 of the same 20 daily
-returns. This is exactly the overlapping-window problem
-`docs/methodology.md`'s sentiment section already documents for forward
-returns, showing up here on the feature side instead.
+Every feature in `src/model.py:CONTINUOUS_FEATURE_COLUMNS` is a rolling or `.diff()` calculation over a trailing window of 20 or 90 trading days. The feature row for one date and the row for the next date share almost all of their underlying days. `realized_vol_20` on Tuesday and on Wednesday use 19 of the same 20 daily returns. This is the overlapping-window problem that `docs/methodology.md` describes for forward returns, showing up on the feature side.
 
-`TimeSeriesSplit(gap=config.ML_TIMESERIES_GAP_DAYS)` prevents a very
-specific, narrower problem: it stops a training row's *target* (which is
-dated `ML_TARGET_HORIZON_DAYS` trading days ahead of that row) from
-falling inside the following test fold. It does **not** make adjacent
-rows independent observations of anything -- the rows inside a single
-fold, and the folds themselves, still share most of their underlying raw
-data. The practical consequence: the walk-forward metrics in
-`ml_model_comparison.csv` are a fair *comparison* between methods (every
-method sees the same folds, the same gap, the same features), but the
-*effective* sample size behind each number is much smaller than the row
-count in `ml_features_daily.csv` suggests. Treat the metrics as directional,
-not as precise estimates with a meaningful standard error.
+`TimeSeriesSplit(gap=config.ML_TIMESERIES_GAP_DAYS)` prevents one narrow problem. It stops a training row's target, which is dated `ML_TARGET_HORIZON_DAYS` trading days ahead of that row, from falling inside the following test fold. It does not make adjacent rows independent. Rows inside a fold, and the folds themselves, still share most of their raw data.
+
+The walk-forward metrics are therefore a fair comparison between methods, because every method sees the same folds, gap and features. They are not precise estimates. The effective sample behind each number is much smaller than the 2,045 rows in `ml_features_daily.csv`. I treat the metrics as directional and attach no standard error to them.
 
 ## 2. Why accuracy is a weak metric here
 
-Regime labels are persistent by construction (`src/regimes.py`'s 90-day
-rolling window and 15-day minimum-persistence filter), and the classes
-are imbalanced -- some regimes hold for months, others rarely occur. Under
-those conditions, both required baselines can already score well without
-any genuine predictive skill:
+Regime labels are persistent by construction. They come from a 90-day rolling window and a 15-day minimum-persistence filter (`src/regimes.py`). The classes are also imbalanced. HARD_ASSET has 108 target days and RISK_ASSET has 870 (`ml_class_support.csv`). Under those conditions, both baselines can score well with no predictive skill at all.
 
-- **Persistence** wins almost automatically whenever the target class is
-  unchanged from the current class, which is most rows, simply because
-  regimes don't flip often.
-- **Majority class** wins whenever the training window happens to be
-  dominated by one label, which class imbalance makes likely.
+Persistence wins on almost every row where the target class equals the current class. That is most rows, because regimes rarely flip. Majority-class wins whenever the training window is dominated by one label, which the imbalance makes likely. In this study its accuracy is only 0.257, because the expanding training window's most common label, IDIOSYNCRATIC, is wrong for most of the test days.
 
-This is exactly why section 6.7 requires balanced accuracy, macro F1, a
-confusion matrix, and class support alongside plain accuracy for every
-method, baselines included -- a single accuracy number from an imbalanced,
-persistent target is easy to misread as skill that isn't there.
+This is why the spec requires balanced accuracy, macro F1, a confusion matrix and class support beside plain accuracy for every method, baselines included. A single accuracy number from a persistent, imbalanced target is easy to read as skill that is not there.
 
-## 3. This is exploratory, not actionable
+## 3. The result is exploratory, not actionable
 
-Per `CLAUDE.md`'s non-negotiables, this project is descriptive, not
-predictive: no trading signals, no price forecasts, no strategy backtests.
-Phase 8's classifier exists to ask "does *any* signal in these features
-predict the regime label days in advance, beyond just assuming it stays
-the same," not to produce something meant to be traded on. Two further
-reasons this result specifically shouldn't be read as actionable, even if
-a model does edge out the persistence baseline on some metric in some
-fold:
+This project is descriptive, not predictive. It produces no trading signals, price forecasts or strategy backtests. I built the classifier to ask whether any signal in these features predicts the regime label days ahead, beyond assuming it stays the same. I did not build it to trade on. Two more reasons the result is not actionable, even if a model beat persistence on some metric in some fold:
 
-- The regime *target* and several of the model's *features* (the 30- and
-  90-day correlations) are both derived from the same underlying rolling
-  correlation calculation `src/regimes.py` uses to build the target in
-  the first place. Some of whatever predictive relationship the model
-  finds is closer to "the target is mechanically smooth" than "the
-  features forecast a genuine shift."
-- One held-out history, five folds, two simple models. That is nowhere
-  near enough evidence to conclude a real, tradable edge exists even in
-  the best case -- see the honesty requirement in
-  `docs/BUILD-SPEC-bitcoin-regime-study.md` section 6.7 and the resulting
-  headline in `docs/findings.md`.
+The target and several features come from the same calculation. The 30-day and 90-day correlations are features, and the regime target is built from the 90-day correlations. Some of any relationship a model finds is closer to "the target is mechanically smooth" than to "the features forecast a real shift".
+
+The evidence is thin. It is one held-out history, five folds and two simple models. That is nowhere near enough to conclude that a tradable edge exists, even in the best case. Neither model beat persistence, and `docs/findings.md` says so in finding 5.

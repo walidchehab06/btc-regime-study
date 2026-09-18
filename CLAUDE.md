@@ -27,6 +27,23 @@ at the start of every session before writing any code.
 - Tests: pytest tests/
 
 ## Current phase
+Phase 9 — complete. This was the last build phase. All nine files under
+docs/ exist (methodology, data-dictionary, validation, findings,
+limitations, ml-caveats, sources, future-work, decisions-log), written in
+first person to section 10's rules. docs/findings.md holds five findings,
+and every number in it traces to a file in outputs/tables/. README.md is
+under 600 words. requirements.txt pins all 45 installed packages (9 direct,
+36 transitive). New `src/robustness.py` (run by `run_all` as Phase 9, after
+Phase 8) writes four tables: `robustness_weekend_handling.csv`,
+`robustness_pearson_vs_spearman.csv`, `robustness_window_30_vs_90.csv`,
+`correlation_latest_snapshot.csv`. Figure 5 got a caption and contrast fix
+and its pass/fail marks became "yes"/"no". `pytest tests/` passes (63/63).
+Verified in a clean copy with a fresh venv: `python -m src.run_all` used
+the cache and reproduced all 37 tables and figures byte for byte. The fetch
+cache expires after one UTC day, so a run after 2026-09-18 re-fetches, needs
+a FRED key, and gives different numbers (see docs/limitations.md and
+docs/future-work.md). Any further work is maintenance, not a new phase.
+
 Phase 8 — complete. `src/model.py` built: the section 6.7 classifier
 predicting the regime label 5 trading days ahead (`config.ML_TARGET_HORIZON_DAYS`),
 multinomial logistic regression and a decision tree capped at

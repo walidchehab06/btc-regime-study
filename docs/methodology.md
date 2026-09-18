@@ -1,159 +1,58 @@
 # Methodology
 
-This document explains, in plain English, the analytical choices made by
-the pipeline. Per BUILD-SPEC-bitcoin-regime-study.md section 6, everything
-here is a deliberate decision, not an accident of how a merge happened to
-come out. Sections are added as each phase of the pipeline is built.
+This document explains, in plain English, every analytical choice in the pipeline. Each choice is deliberate. Where I had to decide something the spec left open, the reasoning is in `docs/decisions-log.md`.
 
-## Calendar alignment (BUILD-SPEC section 6.1)
+## Calendar alignment
 
-Bitcoin trades every day of the year. Nasdaq-listed equities, gold futures,
-and the dollar index only trade on days the relevant exchange is open.
-Correlating two series that don't share a calendar either introduces
-phantom gaps or silently misaligns dates, so a deliberate rule is needed.
+Bitcoin trades every day of the year. Nasdaq-listed equities, gold futures and the dollar index trade only when their exchanges are open. Correlating series that do not share a calendar either creates phantom gaps or silently misaligns dates, so I need a rule.
 
-**The rule: the panel is restricted to the days Nasdaq (`^IXIC`) traded.**
-Every other series is aligned onto that exact set of dates. Any date
-Nasdaq didn't trade is dropped from the panel entirely, for every series,
-including Bitcoin.
+**The rule: I restrict the panel to the days Nasdaq (`^IXIC`) traded.** Every other series is aligned onto that set of dates. A date Nasdaq did not trade is dropped for every series, including Bitcoin.
 
-The consequence for Bitcoin: its "Monday return" is not really a one-day
-return. Bitcoin's price still moved on Saturday and Sunday, but since
-those dates aren't in the panel, Monday's log return is computed as
-`ln(close_Monday / close_Friday)` — it silently absorbs the weekend's price
-action into one multi-day figure. This is a deliberate simplification, made
-explicit here rather than left as a side effect of a merge.
+The consequence is that Bitcoin's Monday return is not a one-day return. Bitcoin moved on Saturday and Sunday, but those dates are not in the panel, so Monday's log return is `ln(close_Monday / close_Friday)`. It absorbs the weekend into one multi-day figure. I made this choice explicitly instead of leaving it as a side effect of a merge.
 
-**Robustness check.** `panel_daily_alt_weekend.parquet` is an alternative
-panel where Bitcoin's log return is computed the other way around: on
-Bitcoin's own full daily calendar first (so Saturday and Sunday each get
-their own one-day return), and only then aligned onto the Nasdaq calendar.
-Monday's row in that panel holds only the Sunday-to-Monday return; the
-weekend return is dropped rather than merged in. Every other column is
-identical between the two panels, so any difference in a downstream
-correlation can be attributed to this one choice. In the built panel, the
-two methods disagree on 474 of 2,168 days (about 22%) — mostly Mondays,
-with the remainder falling on the day after a Nasdaq holiday closes the
-market for more than one day.
+**Robustness check.** `panel_daily_alt_weekend.parquet` is an alternative panel that computes Bitcoin's log return the other way round. It computes the return on Bitcoin's own daily calendar first, so Saturday and Sunday each get a one-day return, and only then aligns onto the Nasdaq calendar. Monday's row then holds only the Sunday-to-Monday return, and the weekend return is dropped. Every other column is identical between the two panels, so any difference downstream comes from this one choice. The two methods disagree on 474 of 2,168 days, about 22%. Of those, 407 are Mondays. The rest fall on the day after a Nasdaq holiday.
 
-Timezone handling: `yfinance` returns UTC-labeled daily bars, and the
-alternative.me sentiment API returns Unix timestamps. Both are converted
-to UTC calendar dates before anything is merged, so a "day" means the same
-thing across every source.
+The effect on the headline correlations is small at the full-period level and visible at the latest date. Full-period correlations move by 0.02 or less for all three pairs. The latest 90-day Nasdaq correlation moves from 0.38 to 0.31, and the gold correlation from 0.58 to 0.55. The regime rules use 90-day readings, so a 0.07 shift could matter at a threshold. I use the absorbed version as the headline because it counts all of Bitcoin's price movement. The numbers are in `outputs/tables/robustness_weekend_handling.csv`.
 
-## Returns, not price levels (BUILD-SPEC section 6.2)
+**Timezones.** `yfinance` returns UTC-labelled daily bars and alternative.me returns Unix timestamps. I convert both to UTC calendar dates before merging, so a "day" means the same thing in every source.
 
-All correlations in this project use daily logarithmic returns,
-`r_t = ln(P_t / P_{t-1})`, never raw prices.
+## Returns, not price levels
 
-Correlating price *levels* of two trending assets tends to produce
-misleadingly high correlation numbers, because both series are
-non-stationary — their statistical properties drift over time. Two assets
-that each trend upward over years will look "correlated" purely because
-they share a long-term drift, independent of whether they actually move
-together on any given day. Log returns are approximately stationary and
-measure the thing that actually matters for this study: does the asset
-tend to move on the same days as the other one. This is a well-known
-failure mode in informal crypto analysis, and naming it explicitly here is
-part of what makes the project's numbers defensible.
+Every correlation in this project uses daily logarithmic returns, `r_t = ln(P_t / P_{t-1})`. I never correlate raw prices.
 
-## Forward-filling the monthly and weekly macro series (BUILD-SPEC section 5.2)
+Two trending price series look correlated because both drift, whether or not they move together on any given day. Statisticians call such series non-stationary. Their statistical properties change over time. Log returns are approximately stationary, and they measure what I care about: does the asset move on the same days as the other one. Correlating price levels is a common mistake in informal crypto analysis, and I name it here so nobody has to wonder whether I made it.
 
-`M2SL` (M2 money supply) is published monthly; `WALCL` (Fed balance sheet)
-is published weekly. The daily panel needs a value for every row, so on
-days between actual releases, the last published value is carried forward.
+## Forward-filling the monthly and weekly macro series
 
-This manufactures the appearance of daily variation out of data that only
-changes once a month or once a week — plotted, it is a staircase, not a
-curve. Treating those flat stretches as meaningful daily movement would be
-a real analytical error: for instance, a rolling correlation computed
-against a forward-filled M2 series is really being driven by a handful of
-distinct M2 readings, not by genuinely independent daily observations.
+`M2SL` (M2 money supply) is published monthly and `WALCL` (Fed balance sheet) weekly. The daily panel needs a value for every row, so between releases I carry the last published value forward.
 
-To keep this honest, the panel carries a sibling `is_forward_filled_*`
-boolean column next to every forward-filled value: `True` on any date that
-isn't one of the series' own reported observation dates, `False` on a
-genuine release date (and on dates before the series' first release, where
-there is nothing to carry forward and the value is left as `NaN` instead).
+This turns data that changes once a month or once a week into something that looks daily. Plotted, it is a staircase. A rolling correlation against a forward-filled M2 series would be driven by a handful of distinct M2 readings, not by independent daily observations. The panel carries an `is_forward_filled_*` boolean next to every forward-filled value. It is `True` on any date that is not one of the series' own release dates. Before a series' first release there is nothing to carry forward, so the value stays `NaN`. No finding in this project depends on `M2SL` or `WALCL`.
 
-## Two calendar mismatches worth naming explicitly
+## Two calendar mismatches
 
-Building the panel surfaced two real gaps, both expected once understood,
-neither a data quality problem:
+Building the panel exposed two gaps. Neither is a data-quality problem.
 
-- **Daily FRED series on bond-market holidays.** `DFII10`, `DTWEXBGS`, and
-  `T10Y2Y` are `NaN` on Columbus Day and Veterans Day every year in the
-  study period, plus a handful of other bond-market-only closures. The
-  Treasury market observes holidays Nasdaq doesn't. These values are left
-  as `NaN`, not filled — see docs/decisions-log.md for the tolerance this
-  required in the data-integrity assertions.
-- **Sentiment index, one missing day.** The Crypto Fear & Greed Index has
-  no published value for 2018-04-16, a genuine gap in the source's own
-  history, not a scheduled holiday. Left as `NaN` rather than forward-filled
-  — sentiment isn't in BUILD-SPEC section 5.2's forward-fill list, and
-  extending that list by assumption for one row wasn't worth it.
+**Daily FRED series on bond-market holidays.** `DFII10`, `DTWEXBGS` and `T10Y2Y` are `NaN` on Columbus Day and Veterans Day every year, and on a few other bond-market-only closures. The Treasury market observes holidays that Nasdaq does not. I leave these as `NaN`. The data-integrity assertions tolerate up to 5% missing in a daily FRED column (`FRED_DAILY_MAX_NAN_FRACTION`). See `docs/decisions-log.md`.
 
-## Rolling correlations (BUILD-SPEC section 6.3)
+**One missing sentiment day.** The Fear & Greed Index has no value for 2018-04-16. That is a gap in the source's own history, not a holiday. I leave it as `NaN`. Sentiment is not on the spec's forward-fill list, and extending the list for one row was not worth the assumption.
 
-Bitcoin's relationship to Nasdaq, gold, and the dollar index is measured
-with a **rolling Pearson correlation of daily log returns** — the
-correlation recomputed on a moving window of trading days, so it can
-change over time instead of collapsing the whole study period into one
-number. Two window lengths are computed in parallel: 30 trading days,
-which reacts quickly but is noisy, and 90 trading days, which is smoother
-and is the window most published institutional figures use (see
-`docs/sources.md`). Neither window is allowed a partial start: the first
-90-day figure needs 90 full days of returns behind it, not fewer.
+## Rolling correlations
 
-**Two independent implementations of the 90-day Pearson correlation.**
-Section 6.3 requires the headline 90-day figure computed twice: once by
-calling pandas' own `.rolling().corr()`, and once by a function I wrote by
-hand in `src/core_math.py` that computes the covariance and the two
-standard deviations directly from the definition,
-`corr(x, y) = cov(x, y) / (std(x) * std(y))`. The two are asserted to
-agree within `1e-9` on every date before either is trusted. The point of
-the hand-written version isn't that pandas is unreliable — it's that I
-need to be able to explain what a correlation coefficient actually
-measures, not just which library method I called.
+I measure Bitcoin's relationship to Nasdaq, gold and the dollar index with a rolling Pearson correlation of daily log returns. I recompute the correlation on a moving window of trading days, so it can change over time instead of collapsing the study into one number. I compute two windows in parallel. The 30-day window reacts quickly and is noisy. The 90-day window is smoother, and it matches most published institutional figures (`docs/sources.md`). Neither window is allowed a partial start. The first 90-day value needs 90 days of returns.
 
-**Spearman as a robustness check, 90-day window only.** Pearson
-correlation is sensitive to outliers, and Bitcoin's return series has
-extreme days. Spearman rank correlation is the standard robustness check:
-instead of correlating the raw return values, it correlates their
-*ranks*. Concretely, `rolling_spearman()` in `src/correlations.py` ranks
-the two series' values **within each 90-day window separately** (not once
-over the whole series — a value's rank depends on what else is in that
-window) and then calls the same hand-written Pearson function on those
-ranks. This works because Spearman correlation is, by definition, the
-Pearson correlation of ranks; it avoids adding a `scipy` dependency for a
-single function, and it means the same covariance-based function does
-double duty. I verified this with a test the ordinary crypto data
-wouldn't have caught by construction: a series `y = x**3` is a perfectly
-predictable (monotonic) function of `x`, but not a linear one, so Pearson
-correlation between them is high but not exactly 1.0, while Spearman —
-which only sees rank order — comes out exactly 1.0. That gap is the whole
-reason the two methods are reported separately.
+The 30-day and 90-day windows give visibly different answers. Over the days where both exist, they have opposite signs on 12% of days for Nasdaq, 17% for gold and 23% for the dollar index. I chose 90 days because it matches the published figures and reacts less to single weeks. The table is `outputs/tables/robustness_window_30_vs_90.csv` and figure 2 shows the effect.
 
-**Three headline pairs, and which gold and dollar series.** The pairs
-tracked are `BTC_NASDAQ` (BTC vs `^IXIC`), `BTC_GOLD`, and `BTC_DXY` (BTC
-vs `DX-Y.NYB`, the ticker figure 1 means by "DXY"). For the gold pair, the
-headline series is **`GLD`, the gold ETF, not `GC=F` gold futures** —
-`GLD` trades on the same calendar the whole panel is anchored to (BUILD-
-SPEC section 6.1), while `GC=F` futures trade different hours, which would
-introduce a second calendar mismatch on top of the one already handled for
-Bitcoin. `GC=F` remains available as the section 5.1 robustness check
-against `GLD`, computed separately in the Phase 6 validation step, not
-under the `BTC_GOLD` label. This was a direct question to the project
-owner per BUILD-SPEC section 13 ("which gold series is the headline"), not
-a default I chose silently.
+**Two independent implementations of the 90-day Pearson correlation.** I compute the headline window twice. One version calls pandas' `.rolling().corr()`. The other is a function I wrote in `src/core_math.py`, which computes the covariance and the two standard deviations from the definition, `corr(x, y) = cov(x, y) / (std(x) * std(y))`. The pipeline asserts that the two agree to within `1e-9` on every date. Pandas is not unreliable. I need to be able to explain what a correlation coefficient measures, and writing it by hand is how I learned that.
 
-## Regime classification (BUILD-SPEC section 6.4)
+**Spearman as a robustness check, 90-day window only.** Pearson correlation is sensitive to outliers, and Bitcoin has extreme days. Spearman correlation ranks the values first. `rolling_spearman()` in `src/correlations.py` ranks the two series within each 90-day window separately, because a value's rank depends on what else is in the window. It then calls the same hand-written Pearson function on the ranks. Spearman is by definition the Pearson correlation of ranks, and this avoids adding `scipy` for one function. A test checks it on `y = x**3`. That series is perfectly predictable from `x` but not linear, so Pearson is high but below 1 while Spearman is exactly 1.
 
-I classify every trading day into one of four regimes, using rules on
-that day's 90-day Pearson correlations, not a clustering algorithm.
-Rule-based classification is deliberate: the thresholds are visible,
-stated up front, and can be stress-tested, unlike whatever a clustering
-algorithm decided internally.
+The two methods differ by 0.04 to 0.06 on average. They differ by more than 0.10 on 11% to 13% of days, and I count those as notable disagreements. The largest gap is 0.53, for Nasdaq on 2020-03-13. At the latest date the two agree closely for Nasdaq (0.38 and 0.38) and gold (0.58 and 0.57). For the dollar index they differ by 0.06 (-0.41 and -0.35). The numbers are in `outputs/tables/robustness_pearson_vs_spearman.csv`.
+
+**Three headline pairs, and which gold and dollar series.** The pairs are `BTC_NASDAQ` (Bitcoin vs `^IXIC`), `BTC_GOLD` and `BTC_DXY` (Bitcoin vs `DX-Y.NYB`, the ticker I mean by "DXY"). For gold, the headline series is `GLD`, the ETF, not `GC=F` futures. `GLD` trades on the calendar the panel is anchored to. `GC=F` trades different hours, which would add a second calendar mismatch on top of Bitcoin's. `GC=F` is the section 5.1 robustness check, computed in the validation step under its own pair label. The spec says to decide the headline gold series deliberately, so I chose `GLD` on purpose and logged the reasoning in `docs/decisions-log.md`.
+
+## Regime classification
+
+I classify every trading day into one of four regimes using rules on that day's 90-day Pearson correlations. I do not use a clustering algorithm. Rules make the thresholds visible and easy to stress-test.
 
 | Regime | Condition |
 |---|---|
@@ -162,176 +61,57 @@ algorithm decided internally.
 | `IDIOSYNCRATIC` | both correlations below 0.25 in absolute value |
 | `MIXED` | anything not matching the above |
 
-These thresholds are a starting proposal, not a fitted result, and
-section 6.5's sensitivity grid exists specifically to test whether they
-matter (see below).
+These thresholds are a starting proposal, not a fitted result. The sensitivity grid below tests whether they matter.
 
-**The persistence filter, and why it's necessary.** Applying the rule
-above to every day, independently, produces labels that flicker: 79
-separate runs of consecutive identical labels over the study period, with
-a median run length of 7 trading days, and 63% of all runs shorter than
-15 days. A regime that changes every week isn't a regime — it's noise
-riding on a threshold. The persistence filter enforces a minimum: a run
-only survives as its own regime period if it holds for at least 15
-consecutive trading days. Shorter runs are merged into the surrounding
-regime.
+**The persistence filter.** Applying the rule to every day independently produces labels that flicker. The raw labels form 79 runs of consecutive identical labels, with a median length of 7 trading days, and 63% of runs are shorter than 15 days. A regime that changes every week is noise near a threshold. The filter keeps a run as its own regime only if it lasts at least 15 consecutive trading days. Shorter runs merge into the surrounding regime.
 
-The one place the rule needed a decision I hadn't seen specified: when a
-short run sits between two *different* regimes, which one absorbs it? I
-merge a short run into the **preceding** regime — a brief blip during an
-established regime doesn't rewrite what came before it. The one exception
-is a short run at the very start of the series, which has no preceding
-regime to merge into, so it takes on the label of the regime that follows
-it instead. A merge can make a run long enough to then swallow its own
-next short neighbor, so the merge step repeats until every surviving run
-clears the 15-day minimum.
+The spec did not say which regime absorbs a short run that sits between two different regimes. I merge it into the preceding regime, because a brief blip inside an established regime should not rewrite what came before. A short run at the very start of the series has no preceding regime, so it takes the label of the regime that follows. A merge can make a run long enough to swallow its own short neighbour, so I repeat the merge until every surviving run is at least 15 days.
 
-The filter's effect, measured directly rather than asserted:
+The filter's effect, measured:
 
-| | Runs (regime periods) | Median run length | Day-to-day label changes |
+| | Runs | Median run length | Day-to-day label changes |
 |---|---|---|---|
-| Raw (no filter) | 79 | 7 trading days | 78 (3.8% of transitions) |
+| Raw | 79 | 7 trading days | 78 (3.8% of transitions) |
 | Filtered | 16 | 102 trading days | 15 (0.7% of transitions) |
 
-The filter cuts the day-to-day flip rate by roughly 5x and turns 79 short,
-noisy runs into 16 regime periods long enough to describe and reason
-about. `outputs/figures/regime_label_stability_before_after.png` shows
-this directly: the raw strip is visibly striped with short-lived color
-changes, mostly in 2019-2020 and 2023-2024 when the Nasdaq and gold
-correlations were both hovering near their thresholds; the filtered strip
-underneath, over the same days, shows only 15 changes in total.
-`outputs/tables/regime_label_stability_before_after.csv` has the exact
-counts.
+The filter cuts the flip rate about fivefold and leaves 16 periods long enough to describe. `outputs/figures/regime_label_stability_before_after.png` shows the difference, and the counts are in `outputs/tables/regime_label_stability_before_after.csv`.
 
-**Outputs.** The filtered regime periods are the regime timeline table
-(`outputs/tables/query_09_regime_timeline.csv`, figure 3). For each
-period, `outputs/tables/regime_summary_statistics.csv` reports Bitcoin's
-annualized return, annualized volatility, maximum drawdown, and average
-Fear & Greed level over that period's dates
-(`src/core_math.py:annualized_return()`, `annualized_volatility()`,
-`max_drawdown()`).
+**Outputs.** The filtered periods form the regime timeline (`outputs/tables/query_09_regime_timeline.csv`, figure 3). For each period, `outputs/tables/regime_summary_statistics.csv` reports Bitcoin's annualised return, annualised volatility, maximum drawdown and average Fear & Greed level. The functions are `annualized_return()`, `annualized_volatility()` and `max_drawdown()` in `src/core_math.py`.
 
-One caveat on the annualized return column specifically: annualizing a
-short window exaggerates whatever happened in it, because the formula
-scales a period's average daily log return up to a full year. The
-20-trading-day `MIXED` period from 2020-12-14 to 2021-01-12 -- the start
-of Bitcoin's late-2020 rally, when the average Fear & Greed reading was
-91.7 (extreme greed) -- annualizes to a return figure in the thousands of
-percent. That number is not wrong given the formula, but it isn't a
-usable estimate of a typical year either; it's what compounding a single
-extraordinary month out to twelve months does arithmetically. Annualized
-return and volatility are more informative for the longer regime periods
-(the `RISK_ASSET` period from 2022-01-11 to 2023-03-22, 300 trading days,
-annualizes to -30.1%) than for anything under roughly two or three
-months. See `docs/limitations.md`.
+Annualised returns on short periods mislead. The formula scales a period's average daily log return up to a full year. The 20-day MIXED period from 2020-12-14 to 2021-01-12 had an average Fear & Greed reading of 91.7. It annualises to 2,816.80 in the table, which is 281,680%. The number follows from the formula and means nothing as a yearly estimate. The 300-day RISK_ASSET period from 2022-01-11 to 2023-03-22 annualises to -30.1%, and that number is more informative. I read the return column only for periods longer than two or three months. See `docs/limitations.md`.
 
-## Sensitivity analysis (BUILD-SPEC section 6.5)
+## Sensitivity analysis
 
-The baseline thresholds above are a starting proposal, and any
-threshold-based rule invites "why those numbers." I re-ran the
-classification and persistence filter across every combination of the
-Nasdaq threshold in {0.30, 0.35, 0.40, 0.45, 0.50} and the gold threshold
-in {0.25, 0.30, 0.35, 0.40, 0.45} -- 25 combinations
-(`src/regimes.py:run_sensitivity_grid()`) -- and, for each, recorded the
-number of regime periods, the share of days in each regime, and whether
-the most recent regime shift (baseline thresholds put its start at
-2026-08-06, `RISK_ASSET` giving way to `HARD_ASSET`) still lands
-somewhere in calendar year 2026.
+Any threshold rule invites the question "why those numbers". I re-ran the classification and the persistence filter for every combination of the Nasdaq threshold in {0.30, 0.35, 0.40, 0.45, 0.50} and the gold threshold in {0.25, 0.30, 0.35, 0.40, 0.45}. That is 25 combinations (`run_sensitivity_grid()` in `src/regimes.py`). For each, I recorded the number of regime periods, the share of days in each regime, and whether a regime transition still falls in calendar year 2026. At the baseline thresholds, the last transition is on 2026-08-06, when RISK_ASSET gives way to HARD_ASSET.
 
-Across all 25 combinations, a regime transition still falls in 2026. The
-number of regime periods identified ranges from 13 to 17 (baseline: 16),
-and `RISK_ASSET`'s share of days ranges from about 25% to 46% depending on
-where the Nasdaq threshold is set -- the Nasdaq threshold has more
-influence on this than the gold threshold does, visible directly in
-`outputs/figures/fig05_sensitivity_heatmap.png` as the grid's stronger
-gradient running left to right than top to bottom. The headline
-observation -- that Bitcoin's regime shifted during 2026 -- is not an
-artifact of the specific baseline threshold choice.
+A transition falls in 2026 in all 25 combinations. The number of regime periods ranges from 13 to 17, against 16 at the baseline. The RISK_ASSET share of days ranges from about 25% to 46%. The Nasdaq threshold drives most of that range, and figure 5 shows a stronger gradient left to right than top to bottom.
 
-## Sentiment analysis (BUILD-SPEC section 6.6)
+The test is loose. It checks that some transition lands in 2026. It does not check that the new label is HARD_ASSET in every combination. I state the result as a survival of the timing of the change, not of the label.
 
-**Bucket definition.** Every day gets one of three sentiment buckets, from
-the Fear & Greed Index value alone: `EXTREME_FEAR` (value <= 20),
-`EXTREME_GREED` (value >= 80), or `MODERATE` (everything in between) --
-`src/sentiment.py:assign_sentiment_bucket()`. These are the thresholds
-BUILD-SPEC section 6.6 specifies as the index's conventional extreme
-bands. They are **not** the same boundaries as `fng_label`, the
-5-category classification alternative.me already assigns and stores
-alongside `fng_value` (used by query 3): checking the panel data directly,
-alternative.me's own "Extreme Fear" label covers values 5 to 25, and its
-"Extreme Greed" label covers 76 to 95. Using `fng_label` here would have
-silently applied a different, un-stated threshold than the one this
-analysis is supposed to test. Of 2,167 days with a Fear & Greed reading,
-292 (13.5%) are `EXTREME_FEAR` and 117 (5.4%) are `EXTREME_GREED` under
-this project's thresholds.
+## Sentiment analysis
 
-**Forward returns.** For each horizon in {1, 5, 20, 60} trading days, the
-forward log return at day *t* is the sum of BTC's log returns over days
-*t*+1 through *t*+horizon -- the same forward window
-`sql/analysis_queries.sql` query 3 already uses for the 20-day case, here
-extended to all four horizons and computed in pandas
-(`src/sentiment.py:compute_forward_log_returns()`) rather than SQL,
-because reporting the median alongside the mean is mandatory per section
-6.6, and SQLite has no built-in median function. The full summary --
-n, mean, median, and population standard deviation for every
-(horizon, bucket) combination -- is in
-`outputs/tables/sentiment_forward_returns_summary.csv` and plotted as
-figure 7. A few figures from that table, as of this run:
+**Buckets.** Each day gets one of three buckets from the Fear & Greed value alone: `EXTREME_FEAR` (value 20 or below), `EXTREME_GREED` (80 or above) and `MODERATE` (in between). The function is `assign_sentiment_bucket()` in `src/sentiment.py`. These are the bands the spec gives as the publisher's conventional extremes. They are not the same as `fng_label`, the five-category label alternative.me stores next to each value, which query 3 uses. In the panel data, alternative.me's "Extreme Fear" covers values from 5 to 25 and "Extreme Greed" covers 76 to 95. Using `fng_label` here would have applied a different threshold from the one I meant to test. Of 2,167 days with a reading, 292 (13.5%) are `EXTREME_FEAR` and 117 (5.4%) are `EXTREME_GREED`.
 
-| Horizon | Bucket | n | mean | median | std dev |
-|---|---|---|---|---|---|
-| 1d | Extreme fear | 292 | +0.0017 | +0.0032 | 0.0543 |
-| 1d | Extreme greed | 117 | +0.0103 | +0.0102 | 0.0527 |
-| 1d | Moderate | 1,756 | +0.0003 | ~0.0000 | 0.0357 |
-| 20d | Extreme fear | 292 | +0.0316 | +0.0334 | 0.1670 |
-| 20d | Extreme greed | 117 | +0.1440 | +0.1165 | 0.2170 |
-| 20d | Moderate | 1,737 | +0.0092 | +0.0064 | 0.1839 |
-| 60d | Extreme fear | 284 | ~0.0000 | -0.0245 | 0.2657 |
-| 60d | Extreme greed | 117 | +0.3404 | +0.1934 | 0.4874 |
-| 60d | Moderate | 1,705 | +0.0490 | +0.0276 | 0.3443 |
+**Forward returns.** For each horizon in {1, 5, 20, 60} trading days, the forward log return at day *t* is the sum of Bitcoin's log returns over days *t*+1 to *t*+horizon. I compute it in pandas (`compute_forward_log_returns()`), not in SQL, because the spec requires the median as well as the mean and SQLite has no median function. The summary has n, mean, median and standard deviation for every horizon and bucket. It is in `outputs/tables/sentiment_forward_returns_summary.csv`, and figure 7 plots it. The results are in `docs/findings.md`.
 
-Extreme-greed days show the largest forward returns at every horizon, and
-extreme-fear days sit close to zero at 60 days -- the opposite of a
-naive "buy the fear" reading. Whatever this pattern is worth, it is
-reported here as a descriptive fact about this sample, not a signal: see
-the overlapping-window caveat immediately below, and note this project is
-descriptive, not predictive, per `CLAUDE.md`'s non-negotiables --
-nothing here is a trading rule.
+**The overlapping-window problem.** I compute the 20-day and 60-day forward returns for every trading day. The window starting tomorrow shares all but one daily return with the window starting today. Consecutive rows of `outputs/tables/sentiment_forward_returns_daily.csv` are therefore not independent, even though the table has one row per day. The 117 extreme greed observations at 60 days represent far fewer than 117 independent quarters. A naive test would make any pattern look more significant than it is. I run no significance test, as the spec instructs, and none should be inferred from the descriptive statistics.
 
-**The overlapping-window problem.** The 20- and 60-day forward returns are
-each computed for every trading day, so the window starting tomorrow and
-the window starting the day after share all but one of their underlying
-daily returns. Consecutive rows of
-`outputs/tables/sentiment_forward_returns_daily.csv` are therefore not
-independent observations, even though the table has one row per day --
-n=117 "extreme greed" 60-day observations really reflects far fewer than
-117 independent 60-trading-day (roughly 3-month) periods, since most of
-them overlap each other almost completely. This inflates how significant
-any pattern in the table would look under a naive statistical test. No
-significance test is run here, and none should be inferred from the
-n/mean/median/std numbers above -- they are reported as descriptive
-statistics only, per BUILD-SPEC section 6.6's explicit instruction.
+**Sentiment against regime.** Query 10 cross-tabulates sentiment bucket against regime label (`outputs/tables/query_10_sentiment_regime_crosstab.csv`). Of 280 extreme fear days that carry a regime label, 189 (67.5%) fall in RISK_ASSET periods. Extreme greed days spread across all four regimes: 28 HARD_ASSET, 35 IDIOSYNCRATIC, 34 MIXED and 20 RISK_ASSET.
 
-**Sentiment vs. regime.** `sql/analysis_queries.sql` query 10
-cross-tabulates sentiment bucket against regime label
-(`outputs/tables/query_10_sentiment_regime_crosstab.csv`). Extreme fear
-days concentrate heavily in `RISK_ASSET` regimes (189 of 280 regime-labeled
-extreme-fear days, 67.5%) -- consistent with Bitcoin selling off alongside
-risk assets during broad fear. Extreme greed days are more evenly spread
-across all four regimes (28 `HARD_ASSET`, 35 `IDIOSYNCRATIC`, 34 `MIXED`,
-20 `RISK_ASSET`), with no single regime dominating the way `RISK_ASSET`
-dominates extreme fear.
+To ask whether extremes cluster near regime transitions, `compute_days_to_nearest_transition()` measures each day's distance in trading days to the nearest boundary of its own regime period. `outputs/tables/sentiment_transition_proximity.csv` compares that distance across buckets. Extreme fear days sit further from transitions (mean 62.0 days, median 63.0, n=280) than moderate days (mean 46.9, median 38.0, n=1,681). Extreme greed days sit closer (mean 36.2, median 22.0, n=117). These are differences in the sample. I did not test them, for the reason above.
 
-To ask directly whether extremes cluster near regime transitions rather
-than in the middle of stable regimes,
-`src/sentiment.py:compute_days_to_nearest_transition()` measures, for
-every day, its trading-day distance to the nearest boundary (start or
-end) of the regime period it falls in, then compares that distance across
-buckets (`outputs/tables/sentiment_transition_proximity.csv`). Extreme
-fear days sit *further* from transitions on average (mean 62.0 trading
-days, median 63.0, n=280) than moderate days do (mean 46.9, median 38.0,
-n=1,681) -- extreme fear tends to show up mid-regime, not at the edges.
-Extreme greed days sit somewhat *closer* to transitions (mean 36.2, median
-22.0, n=117) than moderate days. This is a real difference in the sample,
-not a tested one -- consistent with the overlapping-window caveat above,
-no significance claim is made about it.
+## The classifier
+
+The model is small on purpose. It predicts the regime label 5 trading days ahead (`ML_TARGET_HORIZON_DAYS`) using two models the spec allows: a multinomial logistic regression and a decision tree with `max_depth` fixed at 4. I fixed the depth before I looked at any result. Choosing it by test score would be the tuning the spec forbids.
+
+**Features.** Every feature uses only information available on the prediction date. The list is the 30-day and 90-day Pearson correlations with Nasdaq, gold and the dollar index, 20-day realised Bitcoin volatility, 20-day Bitcoin momentum, the 20-day change in the dollar index (`DX-Y.NYB`) and in the 10-year real yield (`DFII10`), the Fear & Greed level and its 14-day change, and the current regime label one-hot encoded. All windows look backwards. Rows with a missing feature in the warm-up period are dropped, which leaves 2,045 rows (`outputs/tables/ml_features_daily.csv`). A test checks that no missing value reaches the model.
+
+**Validation.** I use `TimeSeriesSplit` with 5 splits and a gap of 5 trading days, which equals the target horizon. Each fold trains on everything before its test block and tests on the next block of 340 days. The gap stops a training row's target, which is dated 5 days ahead, from falling inside the test block. Feature scaling for the logistic regression happens inside a pipeline, so it is fitted on training data only.
+
+I never shuffle. A shuffled split lets the model train on days after the ones it is tested on. Regime labels are highly autocorrelated, so a test day's neighbours on both sides sit in the training set and the model can copy them. That produces impressive and meaningless scores.
+
+**Baselines.** Both run through the same folds as the models. Persistence predicts that the regime in 5 days equals today's. Majority-class predicts the most common label in that fold's own training window, recomputed per fold.
+
+**Scoring.** I report accuracy, balanced accuracy and macro F1, plus confusion matrices and class support, because the classes are imbalanced. The metrics pool the predictions from all five folds. Per-fold numbers are in `outputs/tables/ml_per_fold_metrics.csv`. The result and the reason for it are in `docs/findings.md` and `docs/ml-caveats.md`.
+
+Figure 9 fits the tree on the full history so that it can be drawn and read. That fit is for illustration and I never score it.

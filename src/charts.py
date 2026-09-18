@@ -505,12 +505,12 @@ def plot_sensitivity_heatmap(sensitivity_grid, filename="fig05_sensitivity_heatm
     ax.set_ylabel("Gold correlation threshold")
     ax.set_title("Sensitivity grid: regime periods identified and whether the 2026 shift survives")
 
-    color_midpoint = n_periods_wide.values.max() * 0.6
+    color_midpoint = (n_periods_wide.values.min() + n_periods_wide.values.max()) / 2
     for row in range(len(gold_thresholds)):
         for col in range(len(nasdaq_thresholds)):
             n_periods = int(n_periods_wide.values[row, col])
             survives = bool(survives_wide.values[row, col])
-            mark = "✓" if survives else "✗"
+            mark = "yes" if survives else "no"
             text_color = "white" if n_periods >= color_midpoint else TEXT_PRIMARY
             ax.text(col, row, f"{n_periods}\n{mark}", ha="center", va="center", fontsize=8, color=text_color)
 
@@ -520,8 +520,8 @@ def plot_sensitivity_heatmap(sensitivity_grid, filename="fig05_sensitivity_heatm
         fig,
         f"Source: rolling_correlations (90-day Pearson BTC_NASDAQ, BTC_GOLD). "
         f"{config.REGIME_PERSISTENCE_MIN_DAYS}-day persistence filter applied at every "
-        "threshold combination. Checkmark: a regime transition falls in calendar year 2026 "
-        "at that combination; cross: it does not. See outputs/tables/sensitivity_grid.csv.",
+        "threshold combination.\nyes: a regime transition falls in calendar year 2026 "
+        "at that combination; no: it does not. See outputs/tables/sensitivity_grid.csv.",
     )
 
     return save_figure(fig, filename)

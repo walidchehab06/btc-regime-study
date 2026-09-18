@@ -107,3 +107,40 @@ def test_compute_metrics_on_a_known_confusion_case():
     assert np.isclose(metrics["accuracy"], 0.75)
     assert np.isclose(metrics["balanced_accuracy"], 0.75)
     assert 0.0 < metrics["macro_f1"] < 1.0
+
+
+def test_build_feature_matrix_leaves_no_nan_in_the_modelling_dataset():
+    # Warm-up NaNs from the rolling features, plus a NaN planted in one
+    # correlation column, must all be dropped before the matrix reaches a
+    # model. Section 11 requires that no NaN survives into the modelling data.
+    dates = pd.date_range("2024-01-01", periods=60, freq="D")
+    rng = np.random.default_rng(1)
+    panel = pd.DataFrame(
+        {
+            "log_return_BTC-USD": rng.normal(0, 0.01, len(dates)),
+            config.ML_DXY_FEATURE_COLUMN: 100 + rng.normal(0, 1, len(dates)).cumsum(),
+            config.ML_REAL_YIELD_COLUMN: 2 + rng.normal(0, 0.1, len(dates)).cumsum(),
+            "fng_value": rng.integers(0, 101, len(dates)).astype(float),
+        },
+        index=dates,
+    )
+
+    technical_columns = {
+        "realized_vol_20", "btc_momentum_20", "dxy_change_20",
+        "real_yield_change_20", "fng_level", "fng_change_14",
+    }
+    correlation_column_names = [c for c in model.CONTINUOUS_FEATURE_COLUMNS if c not in technical_columns]
+    correlation_features = pd.DataFrame(
+        rng.uniform(-1, 1, (len(dates), len(correlation_column_names))),
+        index=dates,
+        columns=correlation_column_names,
+    )
+    correlation_features.iloc[30, 0] = np.nan
+
+    regime_labels = pd.Series(config.ML_REGIME_LABEL_ORDER * 15, index=dates)
+
+    X, current_regime_label = model.build_feature_matrix(panel, correlation_features, regime_labels)
+
+    assert not X.isna().any().any()
+    assert len(X) < len(dates)
+    assert X.index.equals(current_regime_label.index)

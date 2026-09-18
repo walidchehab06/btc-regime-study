@@ -21,6 +21,7 @@ from src import (
     fetch_sentiment,
     model,
     regimes,
+    robustness,
     sentiment,
     validation,
 )
@@ -189,6 +190,24 @@ def run_phase_8_model():
     model.main()
 
 
+def run_phase_9_robustness():
+    """
+    Run the robustness-table step for Phase 9.
+
+    Why it exists: groups robustness.main() under the Phase 9 label. Runs
+    after Phase 4 has loaded rolling_correlations, which robustness.py
+    reads, and needs both panels from Phase 2.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
+    print("=== Phase 9: Robustness tables ===")
+    robustness.main()
+
+
 def run_charts():
     """
     Generate every figure, once every table the figures depend on has
@@ -260,6 +279,7 @@ def main():
     run_phase_6_validation()
     run_phase_7_sentiment()
     run_phase_8_model()
+    run_phase_9_robustness()
     run_charts()
     run_analysis_queries()
 

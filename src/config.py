@@ -365,3 +365,17 @@ ML_MODEL_COMPARISON_TABLE_PATH = OUTPUTS_TABLES_DIR / "ml_model_comparison.csv"
 ML_PER_FOLD_METRICS_TABLE_PATH = OUTPUTS_TABLES_DIR / "ml_per_fold_metrics.csv"
 ML_CONFUSION_MATRICES_TABLE_PATH = OUTPUTS_TABLES_DIR / "ml_confusion_matrices.csv"
 ML_CLASS_SUPPORT_TABLE_PATH = OUTPUTS_TABLES_DIR / "ml_class_support.csv"
+
+# --- Robustness tables (BUILD-SPEC section 6.1, 6.3, section 12 Phase 9) ---
+# Written by src/robustness.py so that every robustness result quoted in
+# docs/ has a table behind it.
+ROBUSTNESS_WEEKEND_TABLE_PATH = OUTPUTS_TABLES_DIR / "robustness_weekend_handling.csv"
+ROBUSTNESS_PEARSON_VS_SPEARMAN_TABLE_PATH = OUTPUTS_TABLES_DIR / "robustness_pearson_vs_spearman.csv"
+ROBUSTNESS_WINDOW_TABLE_PATH = OUTPUTS_TABLES_DIR / "robustness_window_30_vs_90.csv"
+CORRELATION_LATEST_SNAPSHOT_TABLE_PATH = OUTPUTS_TABLES_DIR / "correlation_latest_snapshot.csv"
+
+# Section 6.3 asks where Pearson and Spearman "disagree notably". I count a
+# day as a notable disagreement when the two 90-day readings for the same
+# pair differ by more than this many correlation points. It is a reporting
+# threshold only; nothing downstream depends on it.
+ROBUSTNESS_NOTABLE_DIFFERENCE = 0.10
