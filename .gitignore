@@ -17,3 +17,6 @@ Thumbs.db
 # Large intermediate data (raw cache is committed; processed is rebuilt)
 data/processed/*.parquet
 data/processed/*.db
+
+# Build specification: kept locally, not published
+docs/BUILD-SPEC-bitcoin-regime-study.md

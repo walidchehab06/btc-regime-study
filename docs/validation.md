@@ -1,6 +1,6 @@
 # Validation against published institutional figures
 
-BUILD-SPEC-bitcoin-regime-study.md section 3 lists correlation figures that circulated in institutional research during 2026 (Grayscale, Bitwise). The spec calls them context, not inputs. I computed my own correlations from raw price data first and then compared. Every value below comes from `outputs/tables/validation_comparison.csv` (produced by `src/validation.py`) or from the 90-day correlations stored in `rolling_correlations`. Citations for every published figure are in `docs/sources.md`.
+My build specification, which is not included in this repository, listed correlation figures that circulated in institutional research during 2026 (Grayscale, Bitwise). It called them context, not inputs. I computed my own correlations from raw price data first and then compared. Every value below comes from `outputs/tables/validation_comparison.csv` (produced by `src/validation.py`) or from the 90-day correlations stored in `rolling_correlations`. Citations for every published figure are in `docs/sources.md`.
 
 ## Comparison table
 

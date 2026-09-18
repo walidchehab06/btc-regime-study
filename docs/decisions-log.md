@@ -1,14 +1,17 @@
 # Decisions log
 
 Format: date, decision, alternatives considered, reason, whether the owner
-was consulted. Per BUILD-SPEC-bitcoin-regime-study.md section 13, this file
-also carries one-line pointers to concepts the owner is currently learning,
-rather than turning code comments into a tutorial.
+was consulted. This file also carries one-line pointers to concepts the owner
+is currently learning, rather than turning code comments into a tutorial.
+
+"The spec" and "build spec" below mean the build specification that directed
+construction. It is not included in this repository. Section numbers refer
+to its numbering.
 
 ---
 
 **2026-09-18: `src/run_all.py` as the single pipeline entry point, no Makefile**
-Alternatives considered: a `Makefile` (BUILD-SPEC section 7's default), a
+Alternatives considered: a `Makefile` (build spec section 7's default), a
 `run.sh` shell script.
 Reason: development is on Windows without `make` installed. A Python entry
 point run as `python -m src.run_all` needs no extra tooling and works the
@@ -16,7 +19,7 @@ same in PowerShell as anywhere else.
 Owner consulted: yes, explicitly requested.
 
 **2026-09-18: Raw cache files saved as CSV, not Parquet**
-Alternatives considered: Parquet (BUILD-SPEC section 5.4 allows either).
+Alternatives considered: Parquet (build spec section 5.4 allows either).
 Reason: CSV is readable by eye in a text editor, which matters for a
 beginner debugging a failed or malformed pull. Parquet is used from Phase 2
 onward for the processed panel, where file size and dtype fidelity start to
@@ -29,9 +32,9 @@ specified here."
 Alternatives considered: duplicating manifest read/write/cache-check logic
 inside each of `fetch_market.py`, `fetch_fred.py`, and `fetch_sentiment.py`.
 Reason: all three fetch modules need to record the same provenance fields
-(BUILD-SPEC section 5.4) and apply the same same-day caching rule; one
+(build spec section 5.4) and apply the same same-day caching rule; one
 shared module means that logic is tested and fixed in one place. Not listed
-in BUILD-SPEC section 7's repo tree, but adding small internal helper
+in build spec section 7's repo tree, but adding small internal helper
 modules is an implementation detail, not a scope change.
 Owner consulted: no.
 
@@ -39,7 +42,7 @@ Owner consulted: no.
 Alternatives considered: adding it only when Phase 2 first writes
 `panel_daily.parquet`.
 Reason: it's a direct dependency for the Parquet output the repo structure
-(BUILD-SPEC section 7) already commits to, and pinning it alongside the
+(build spec section 7) already commits to, and pinning it alongside the
 rest of the stack now avoids a mid-project requirements.txt churn. Not
 named explicitly in section 11's package list, which is otherwise treated
 as the ceiling on dependencies ("nothing else without asking"), flagged
@@ -49,7 +52,7 @@ Owner consulted: no.
 **2026-09-18: Phase 1 (data acquisition) signed off as complete**
 Alternatives considered: n/a, this is a phase closeout, not a build decision.
 Reason: owner independently spot-checked the raw CSVs and `_manifest.json`
-and confirmed they match BUILD-SPEC section 5.4's provenance requirements.
+and confirmed they match build spec section 5.4's provenance requirements.
 `pytest tests/` passes (4/4) and re-running `python -m src.run_all` a second
 time correctly skips every source via cache with no API calls.
 Owner consulted: yes, verification performed directly by the owner.
@@ -58,7 +61,7 @@ Observed in the raw data, carried into Phase 2 rather than acted on now:
 row counts differ across nominally "daily" sources (2,168 rows for
 NYSE-hours equity tickers vs. 2,171-2,172 for `GC=F`/`DX-Y.NYB`/`^VIX`
 vs. 2,247-2,251 for the daily FRED series vs. 3,151 for Bitcoin), because
-each trades on a different calendar. This is exactly the problem BUILD-SPEC
+each trades on a different calendar. This is exactly the problem build spec
 section 6.1 assigns to the Nasdaq-trading-day inner join, nothing to fix
 in Phase 1, just a concrete number to point to when explaining why the
 calendar alignment step exists.
@@ -149,7 +152,7 @@ created with their final structure in Phase 3, populated later**
 Alternatives considered: deferring the CREATE TABLE statements for these
 three tables until Phase 4 (correlations) and Phase 5 (regimes) actually
 have data to put in them.
-Reason: BUILD-SPEC section 8 specifies the full schema as one deliverable
+Reason: build spec section 8 specifies the full schema as one deliverable
 of Phase 3; splitting table creation across phases would mean the schema
 in `sql/schema.sql` is incomplete until Phase 5 finishes, contradicting
 the "make it real, not decorative" framing of section 8. Creating the
@@ -161,7 +164,7 @@ Owner consulted: yes, explicitly requested this framing for Phase 3.
 
 **2026-09-18: Analysis query 7 reconciles the ETL load against an
 independently recomputed check table, not correlation values**
-What happened: BUILD-SPEC section 8's literal wording for query 7 is "a
+What happened: build spec section 8's literal wording for query 7 is "a
 join proving that the correlation values stored in SQLite match those
 computed in Pandas." `rolling_correlations` is empty until Phase 4 (see
 above), so that query would pass vacuously on 0 rows right now, not a
@@ -177,7 +180,7 @@ vectorized melt.
 Reason chosen (2): it validates real, present data, the Phase 3 ETL
 load, rather than a table that doesn't exist yet, and it follows the
 same "two independently written implementations must agree" principle
-BUILD-SPEC section 6.3 already requires for the Phase 4 correlation
+build spec section 6.3 already requires for the Phase 4 correlation
 functions. The query does execute and pass on real data: 17,344 rows
 compared, 0 mismatches. The literal correlation-value reconciliation
 section 8 describes gets added once Phase 4 populates
@@ -208,7 +211,7 @@ Fear & Greed gap (see the Phase 2 entry above) surfacing again downstream,
 not a new data problem.
 
 **2026-09-18: GLD, not GC=F, is the headline `BTC_GOLD` pair**
-Alternatives considered: `GC=F` gold futures (BUILD-SPEC section 5.1 calls
+Alternatives considered: `GC=F` gold futures (build spec section 5.1 calls
 it the "hard-asset benchmark" and frames `GLD` only as a robustness check
 against it).
 Reason: `GLD` trades on the same Nasdaq-anchored calendar the rest of the
@@ -232,7 +235,7 @@ a window preserve the same relative order but not the same spacing between
 values, and Pearson correlation is not invariant to that kind of
 transform. Verified this distinction with a test (`y = x**3`, a monotonic
 but non-linear pair): Spearman correctly returns 1.0, Pearson does not.
-Reason for the chosen approach over `scipy`: BUILD-SPEC section 11 treats
+Reason for the chosen approach over `scipy`: build spec section 11 treats
 the package list as a ceiling ("nothing else without asking"); ranking a
 90-day window with `pandas.Series.rank()` and calling the already-written
 `core_math.pearson_correlation()` on the ranks needed no new dependency
@@ -271,7 +274,7 @@ Owner consulted: no, implementation detail needed to make Phase 4's own
 acceptance criterion (query results actually populated) true.
 
 **2026-09-18: Query 8 added: the literal correlation-value reconciliation
-BUILD-SPEC section 8 describes, deferred from Phase 3**
+build spec section 8 describes, deferred from Phase 3**
 What happened: the Phase 3 decisions-log entry for query 7 already flagged
 that section 8's literal wording for that slot, "a join proving that the
 correlation values stored in SQLite match those computed in Pandas", had
@@ -307,7 +310,7 @@ run's log output and the rendered figures directly.
 
 **2026-09-18: Persistence filter merges a short run into the preceding
 regime, not the following one**
-What happened: BUILD-SPEC section 6.4 says a run shorter than 15 trading
+What happened: build spec section 6.4 says a run shorter than 15 trading
 days is "relabelled to the surrounding regime" but doesn't say which side
 when the run sits between two *different* regimes.
 Alternatives considered: merge into the following run instead; merge into
@@ -376,7 +379,7 @@ Alternatives considered: suppressing annualized return for periods under
 some length threshold; reporting cumulative period return instead of
 annualized return for short periods; adding a second config threshold to
 switch formulas.
-Reason not to change the metric: BUILD-SPEC section 6.4 asks for
+Reason not to change the metric: build spec section 6.4 asks for
 annualized return as a per-regime statistic without a length exception,
 and the number is not fabricated, it is exactly what the stated formula
 produces. Silently changing the definition for some rows and not others
@@ -400,7 +403,7 @@ tests/` passes (43/43, including the new `tests/test_regimes.py` and the
 new `core_math` stat-function tests in `tests/test_core_math.py`).
 Queries 4, 6, and 9 return non-vacuous results (4, 4, and 16 rows).
 Owner consulted: yes, thresholds, the persistence filter, and the
-sensitivity grid were confirmed against BUILD-SPEC section 6.4/6.5 and
+sensitivity grid were confirmed against build spec section 6.4/6.5 and
 against a before/after label-stability comparison before any Phase 5 code
 was written.
 
@@ -430,7 +433,7 @@ at run time (same two functions, same `CORRELATION_TOLERANCE`, same
 persisting a second reconciliation table would add SQL surface with no
 analysis question that needs it, since `BTC_NASDAQ_NDX`/`BTC_GOLD_GCF` are
 one-off robustness checks against specific published dates, not new
-headline figures BUILD-SPEC section 6.3's dual-implementation mandate is
+headline figures build spec section 6.3's dual-implementation mandate is
 scoped to.
 Owner consulted: no.
 
@@ -485,7 +488,7 @@ classification alternative.me already assigns ("Extreme Fear", "Fear",
 "Neutral", "Greed", "Extreme Greed") and that query 3 already groups by.
 Reason: checking the actual panel data, alternative.me's own "Extreme Fear"
 band runs from value 5 up to 25, and "Extreme Greed" from 76 to 95, not
-the <=20 / >=80 convention BUILD-SPEC section 6.6 explicitly specifies.
+the <=20 / >=80 convention build spec section 6.6 explicitly specifies.
 `src/sentiment.py:assign_sentiment_bucket()` classifies every day into
 EXTREME_FEAR (<=20), EXTREME_GREED (>=80), or MODERATE directly from
 `fng_value`, using `config.SENTIMENT_EXTREME_FEAR_MAX` /

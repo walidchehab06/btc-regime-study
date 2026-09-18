@@ -16,7 +16,7 @@ Regime labels are persistent by construction. They come from a 90-day rolling wi
 
 Persistence wins on almost every row where the target class equals the current class. That is most rows, because regimes rarely flip. Majority-class wins whenever the training window is dominated by one label, which the imbalance makes likely. In this study its accuracy is only 0.257, because the expanding training window's most common label, IDIOSYNCRATIC, is wrong for most of the test days.
 
-This is why the spec requires balanced accuracy, macro F1, a confusion matrix and class support beside plain accuracy for every method, baselines included. A single accuracy number from a persistent, imbalanced target is easy to read as skill that is not there.
+This is why my build specification requires balanced accuracy, macro F1, a confusion matrix and class support beside plain accuracy for every method, baselines included. A single accuracy number from a persistent, imbalanced target is easy to read as skill that is not there.
 
 ## 3. The result is exploratory, not actionable
 

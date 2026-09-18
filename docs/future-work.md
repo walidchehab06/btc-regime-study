@@ -1,6 +1,6 @@
 # Future work
 
-These are ideas I kept out of version 1. Some are outside the scope in BUILD-SPEC section 4, and some came up while building. None of them is a price forecast or a trading rule, and I do not plan to add either.
+These are ideas I kept out of version 1. Some are outside the scope I set at the start, and some came up while building. None of them is a price forecast or a trading rule, and I do not plan to add either.
 
 ## Data
 

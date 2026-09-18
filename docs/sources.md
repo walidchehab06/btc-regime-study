@@ -1,6 +1,6 @@
 # Sources
 
-External figures quoted anywhere in my write-up, with publisher, title, URL and the date I accessed them, per BUILD-SPEC-bitcoin-regime-study.md section 3. These figures are context, not inputs. `docs/validation.md` compares my own computed numbers against them, and `config.PUBLISHED_VALIDATION_FIGURES` holds the values as code-level constants.
+External figures quoted anywhere in my write-up, with publisher, title, URL and the date I accessed them. These figures are context, not inputs. `docs/validation.md` compares my own computed numbers against them, and `config.PUBLISHED_VALIDATION_FIGURES` holds the values as code-level constants.
 
 ## Grayscale: BTC 90-day correlation with Nasdaq and gold
 

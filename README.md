@@ -28,7 +28,7 @@ pytest tests/
 
 `python -m src.run_all` rebuilds every table in `outputs/tables/` and every figure in `outputs/figures/`. It replaces a Makefile, because I do not have `make` installed.
 
-The fetch cache is valid for one UTC day. On 2026-09-18 the run reads the committed files and needs no API key. On any later day it fetches fresh data and needs a FRED key in `.env` (copy `.env.example`). The numbers then differ from those below.
+The fetch cache is valid for one UTC day. On 2026-09-18 the run reads the committed files and needs no API key. On any later day a fresh clone fetches new data instead, and the run fails unless `.env` holds a `FRED_API_KEY` (copy `.env.example` and add a free key from FRED). The numbers then differ from those below.
 
 ## Headline findings
 
@@ -54,4 +54,4 @@ The tables are in `outputs/tables/`, and each finding in `docs/findings.md` carr
 | `docs/decisions-log.md` | Each non-obvious decision, with alternatives and reasons |
 | `docs/future-work.md` | Ideas I left out of version 1 |
 
-The code is in `src/`, the SQL in `sql/`, and the tests in `tests/`. The original build specification is `docs/BUILD-SPEC-bitcoin-regime-study.md`.
+The code is in `src/`, the SQL in `sql/`, and the tests in `tests/`. A build specification directed construction, but it is not included in this repository. `docs/methodology.md` and `docs/decisions-log.md` record what I built and why.

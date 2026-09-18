@@ -1,8 +1,9 @@
 # Project context for Claude Code
 
-This repository is a Bitcoin cross-asset regime study. The complete build
-specification is in docs/BUILD-SPEC-bitcoin-regime-study.md. Read it fully
-at the start of every session before writing any code.
+This repository is a Bitcoin cross-asset regime study. A build specification
+directed its construction but is not included in the public repo. For the
+analytical choices and the reasons behind them, read docs/methodology.md
+and docs/decisions-log.md.
 
 ## Non-negotiables
 - Never fabricate data, numbers, or citations. If a data source fails, stop and
@@ -27,7 +28,9 @@ at the start of every session before writing any code.
 - Tests: pytest tests/
 
 ## Current phase
-Phase 9 — complete. This was the last build phase. All nine files under
+Build complete — Phase 9 done, moving to owner's writeup and publishing pass.
+
+Phase 9 summary: this was the last build phase. All nine files under
 docs/ exist (methodology, data-dictionary, validation, findings,
 limitations, ml-caveats, sources, future-work, decisions-log), written in
 first person to section 10's rules. docs/findings.md holds five findings,

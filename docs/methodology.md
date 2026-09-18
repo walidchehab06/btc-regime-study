@@ -1,6 +1,6 @@
 # Methodology
 
-This document explains, in plain English, every analytical choice in the pipeline. Each choice is deliberate. Where I had to decide something the spec left open, the reasoning is in `docs/decisions-log.md`.
+This document explains, in plain English, every analytical choice in the pipeline. Each choice is deliberate. Where I had to decide something my build specification left open, the reasoning is in `docs/decisions-log.md`.
 
 ## Calendar alignment
 
